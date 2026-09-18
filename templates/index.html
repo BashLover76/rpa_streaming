@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Séries par plateformes{% endblock %}
+
+{% block content %}
+<section class="summary">
+  <div>
+    <h1>Séries par plateformes</h1>
+    <p>Vue locale issue de SQLite, avec historique et calendrier BetaSeries.</p>
+  </div>
+  <div class="stats">
+    <span><strong>{{ stats.series }}</strong>Séries</span>
+    <span><strong>{{ stats.calendar }}</strong>Épisodes calendrier</span>
+    <span><strong>{{ stats.history }}</strong>Historiques</span>
+    <span><strong>{{ stats.synced }}</strong>Synchros BetaSeries</span>
+  </div>
+</section>
+
+<form class="filters" method="get">
+  <input name="q" value="{{ query }}" placeholder="Rechercher une série">
+  <select name="platform">
+    <option value="">Toutes les plateformes</option>
+    {% for item in platforms %}
+      <option value="{{ item.platform }}" {% if selected_platform == item.platform %}selected{% endif %}>
+        {{ platform_labels.get(item.platform, item.platform) }} ({{ item.total }})
+      </option>
+    {% endfor %}
+  </select>
+  <button type="submit">Filtrer</button>
+</form>
+
+<section class="platform-grid">
+  {% for item in platforms %}
+    <a class="platform-pill" href="{{ url_for('index', platform=item.platform) }}">
+      <span>{{ platform_labels.get(item.platform, item.platform) }}</span>
+      <strong>{{ item.total }}</strong>
+    </a>
+  {% endfor %}
+</section>
+
+<section class="series-list">
+  {% for item in series %}
+    <a class="series-row" href="{{ url_for('series_detail', series_id=item.id) }}">
+      {% if item.poster_url %}
+        <img class="series-thumb" src="{{ item.poster_url }}" alt="">
+      {% else %}
+        <div class="series-thumb placeholder"></div>
+      {% endif %}
+      <div>
+        <strong>{{ item.titre }}</strong>
+        <span>{{ platform_labels.get(item.plateforme, item.plateforme) }}</span>
+      </div>
+      <div class="row-meta">
+        <span>{{ item.history_count }} vus</span>
+        {% if item.synced_count %}
+          <span>{{ item.synced_count }} sync</span>
+        {% elif item.matched_count %}
+          <span>{{ item.matched_count }} prêts</span>
+        {% endif %}
+        <span>{{ item.calendar_count }} dates</span>
+        {% if item.next_air_date %}
+          <span class="next">Prochain: {{ item.next_air_date }}</span>
+        {% else %}
+          <span class="muted">Aucune sortie connue</span>
+        {% endif %}
+      </div>
+    </a>
+  {% else %}
+    <p class="empty">Aucune série ne correspond à cette recherche.</p>
+  {% endfor %}
+</section>
+{% endblock %}

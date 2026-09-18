@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Streaming RPA Helper",
+  "version": "0.1.0",
+  "description": "Expose des indices DOM stables pour l'agent RPA local.",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": [
+    "https://www.disneyplus.com/*",
+    "https://www.canalplus.com/*",
+    "https://tv.apple.com/*",
+    "https://www.hbomax.com/*",
+    "https://www.paramountplus.com/*",
+    "https://www.ocs.fr/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.disneyplus.com/*",
+        "https://www.canalplus.com/*",
+        "https://tv.apple.com/*",
+        "https://www.hbomax.com/*",
+        "https://www.paramountplus.com/*",
+        "https://www.ocs.fr/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "canal_plus",
+  "display_name": "CANAL+",
+  "country": "FR",
+  "strategy": "rpa",
+  "api": {
+    "available": false,
+    "notes": "Les endpoints CANAL+/myCANAL sont privés et changent régulièrement. Le RPA persistant est privilégié."
+  },
+  "rpa": {
+    "start_url": "https://www.canalplus.com/",
+    "wait_after_login_seconds": 18,
+    "requires_browser_extension": true,
+    "strict_history_scope": true,
+    "selectors": {
+      "history_container": "[class*='ContentRow___']:has(h2:has-text('Continuer la lecture'))",
+      "history_rows": "[class*='ContentRow___']:has(h2:has-text('Continuer la lecture')) li a[title][href]",
+      "cookie_accept": "button:has-text('Accepter'), button:has-text('Continuer sans accepter')",
+      "show_more": "[class*='ContentRow___']:has(h2:has-text('Continuer la lecture')) button:has-text('Voir plus')"
+    }
+  }
+}

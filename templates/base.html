@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Streaming Dashboard{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="{{ url_for('index') }}">Streaming DB</a>
+      <nav>
+        <a href="{{ url_for('index') }}">Séries</a>
+        <a href="{{ url_for('calendar_view') }}" {% if request.endpoint == 'calendar_view' %}aria-current="page"{% endif %}>Calendrier</a>
+        <a href="{{ url_for('admin_view') }}" {% if request.endpoint == 'admin_view' %}aria-current="page"{% endif %}>Admin</a>
+      </nav>
+    </header>
+    <main class="page">
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Crunchyroll API Token Helper",
+  "version": "0.1.0",
+  "description": "Capture localement le header client Crunchyroll nécessaire au wrapper API non officiel.",
+  "permissions": ["storage", "webRequest"],
+  "host_permissions": [
+    "https://beta-api.crunchyroll.com/*",
+    "https://www.crunchyroll.com/*",
+    "https://sso.crunchyroll.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Crunchyroll Token Helper"
+  }
+}

@@ -1,0 +1,7 @@
+[
+  "config/platforms/netflix.json",
+  "config/platforms/prime_video.json",
+  "config/platforms/disney_plus.json",
+  "config/platforms/canal_plus.json",
+  "config/platforms/crunchyroll.json"
+]

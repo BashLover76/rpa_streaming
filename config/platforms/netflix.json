@@ -1,0 +1,21 @@
+{
+  "name": "netflix",
+  "display_name": "Netflix",
+  "country": "FR",
+  "strategy": "rpa",
+  "api": {
+    "available": false,
+    "notes": "Netflix a retiré son API publique. L'historique est accessible depuis la page officielle Viewing activity; le RPA est la stratégie la plus stable pour un usage personnel."
+  },
+  "rpa": {
+    "start_url": "https://www.netflix.com/viewingactivity",
+    "wait_after_login_seconds": 12,
+    "requires_browser_extension": false,
+    "selectors": {
+      "history_container": "[data-uia='viewing-activity']",
+      "history_rows": "[data-uia='viewing-activity'] li, .retableRow, [data-uia='viewing-activity'] div",
+      "cookie_accept": "button:has-text('Accepter'), button:has-text('Accept')",
+      "show_more": "button:has-text('Afficher plus'), button:has-text('Show More')"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "apple_tv_plus",
+  "display_name": "Apple TV+",
+  "country": "FR",
+  "strategy": "rpa",
+  "api": {
+    "available": false,
+    "notes": "Pas d'API publique pour l'historique TV+ web. Les APIs Apple TV privées sont liées aux appareils/écosystèmes et ne fournissent pas simplement l'historique web du compte."
+  },
+  "rpa": {
+    "start_url": "https://tv.apple.com/fr",
+    "wait_after_login_seconds": 18,
+    "requires_browser_extension": true,
+    "selectors": {
+      "history_container": "main, [role='main'], div:has-text('À suivre'), div:has-text('Up Next')",
+      "history_rows": "a[href*='/episode/'], a[href*='/show/'], li, article",
+      "cookie_accept": "button:has-text('Accepter'), button:has-text('Accept')",
+      "show_more": "button:has-text('Tout voir'), button:has-text('See All')"
+    }
+  }
+}

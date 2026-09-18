@@ -1,0 +1,21 @@
+{
+  "name": "arte_tv",
+  "display_name": "ARTE.tv",
+  "country": "FR",
+  "strategy": "rpa",
+  "api": {
+    "available": false,
+    "notes": "ARTE expose des endpoints publics pour le catalogue, mais pas un historique personnel universel. Le RPA peut récupérer les contenus visibles du compte."
+  },
+  "rpa": {
+    "start_url": "https://www.arte.tv/fr/",
+    "wait_after_login_seconds": 8,
+    "requires_browser_extension": false,
+    "selectors": {
+      "history_container": "main, [role='main'], div:has-text('Continuer'), div:has-text('Ma liste')",
+      "history_rows": "a[href*='/videos/'], article, li",
+      "cookie_accept": "button:has-text('Accepter'), button:has-text('Accept')",
+      "show_more": "button:has-text('Voir plus'), button:has-text('Tout voir')"
+    }
+  }
+}
