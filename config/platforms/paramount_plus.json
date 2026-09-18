@@ -1,0 +1,21 @@
+{
+  "name": "paramount_plus",
+  "display_name": "Paramount+",
+  "country": "FR",
+  "strategy": "rpa",
+  "api": {
+    "available": false,
+    "notes": "Pas d'API publique fiable pour l'historique personnel. Utilisation RPA sur les rails Continue Watching / Watchlist."
+  },
+  "rpa": {
+    "start_url": "https://www.paramountplus.com/fr/",
+    "wait_after_login_seconds": 18,
+    "requires_browser_extension": true,
+    "selectors": {
+      "history_container": "main, [role='main'], div:has-text('Continuer à regarder'), div:has-text('Continue Watching')",
+      "history_rows": "a[href*='/shows/'], a[href*='/episodes/'], article, li",
+      "cookie_accept": "button:has-text('Accepter'), button:has-text('Accept')",
+      "show_more": "button:has-text('Voir plus'), button:has-text('See All')"
+    }
+  }
+}

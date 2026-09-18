@@ -1,0 +1,29 @@
+{
+  "name": "crunchyroll",
+  "display_name": "Crunchyroll",
+  "country": "FR",
+  "strategy": "api_then_rpa",
+  "api": {
+    "available": true,
+    "adapter": "crunchyroll_unofficial",
+    "package_candidates": ["crunchyroll-api", "crunchyroll"],
+    "required_env": ["CRUNCHYROLL_EMAIL", "CRUNCHYROLL_PASSWORD"],
+    "optional_env": ["CRUNCHYROLL_PROFILE_ID", "CRUNCHYROLL_LOCALE"],
+    "notes": "Des wrappers non officiels existent pour Crunchyroll. Ils peuvent casser si Crunchyroll modifie ses endpoints; le RPA reste configuré en secours."
+  },
+  "rpa": {
+    "start_url": "https://www.crunchyroll.com/fr/history",
+    "wait_after_login_seconds": 12,
+    "requires_browser_extension": false,
+    "strict_history_scope": true,
+    "selector_state": "attached",
+    "max_scroll_steps": 500,
+    "scroll_wait_ms": 750,
+    "selectors": {
+      "history_container": ".history-body",
+      "history_rows": ".history-body [class^='history-playable-card--']",
+      "cookie_accept": "button:has-text('Accepter'), button:has-text('Accept')",
+      "show_more": "button:has-text('Voir plus'), button:has-text('More')"
+    }
+  }
+}

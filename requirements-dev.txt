@@ -1,0 +1,2 @@
+# Development tooling
+black>=26.0

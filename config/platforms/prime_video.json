@@ -1,0 +1,21 @@
+{
+  "name": "prime_video",
+  "display_name": "Prime Video",
+  "country": "FR",
+  "strategy": "rpa",
+  "api": {
+    "available": false,
+    "notes": "Pas d'API publique documentée pour l'historique personnel Prime Video. Le site expose une page Watch History selon les comptes et régions."
+  },
+  "rpa": {
+    "start_url": "https://www.primevideo.com/settings/watch-history",
+    "wait_after_login_seconds": 15,
+    "requires_browser_extension": false,
+    "selectors": {
+      "history_container": "[data-testid='activity-history-items']",
+      "history_rows": "[data-testid='activity-history-item']",
+      "cookie_accept": "button:has-text('Accepter'), button:has-text('Accept')",
+      "show_more": "button:has-text('Plus'), button:has-text('More'), button:has-text('Afficher')"
+    }
+  }
+}

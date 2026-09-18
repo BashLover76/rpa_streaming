@@ -1,0 +1,21 @@
+{
+  "name": "max",
+  "display_name": "HBO Max / Max",
+  "country": "FR",
+  "strategy": "rpa",
+  "api": {
+    "available": false,
+    "notes": "Pas d'API publique documentée pour l'historique personnel. La plateforme utilise des endpoints privés et une interface très dynamique."
+  },
+  "rpa": {
+    "start_url": "https://www.hbomax.com/fr/fr",
+    "wait_after_login_seconds": 18,
+    "requires_browser_extension": true,
+    "selectors": {
+      "history_container": "main, [role='main'], div:has-text('Continuer à regarder'), div:has-text('Continue Watching')",
+      "history_rows": "a[href*='/series/'], a[href*='/show/'], article, [data-testid*='tile']",
+      "cookie_accept": "button:has-text('Accepter'), button:has-text('Accept')",
+      "show_more": "button:has-text('Voir plus'), button:has-text('See All')"
+    }
+  }
+}

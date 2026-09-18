@@ -1,0 +1,8 @@
+[tool.black]
+line-length = 88
+target-version = ["py314"]
+include = '\\.pyi?$'
+exclude = '''
+/(\\.git|\\.venv|artifacts|backups|cinemagoer\\.db)/
+|\\.continue/
+'''

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Calendrier des sorties{% endblock %}
+{% block content %}
+<section class="calendar-heading">
+  <h1>Calendrier des sorties</h1>
+  <span class="muted">{{ episode_count }} épisode{% if episode_count != 1 %}s{% endif %} à venir</span>
+</section>
+
+<form method="get" class="calendar-filters">
+  <fieldset>
+    <legend>Plateformes</legend>
+    <div class="platform-checkboxes">
+      {% for item in platforms %}
+      <label><input type="checkbox" name="platform" value="{{ item.platform }}" {% if item.platform in selected_platforms %}checked{% endif %}>
+        {{ platform_labels.get(item.platform, item.platform) }}
+      </label>
+      {% endfor %}
+    </div>
+  </fieldset>
+  <div class="calendar-filter-actions">
+    <label for="calendar-month">Mois</label>
+    <input id="calendar-month" type="month" name="month" value="{{ month.strftime('%Y-%m') }}" min="1900-01" max="9998-12" required>
+    <button type="submit">Filtrer</button>
+    <a href="{{ url_for('calendar_view', month=month.strftime('%Y-%m')) }}">Toutes les plateformes</a>
+  </div>
+</form>
+
+<div class="calendar-toolbar">
+  <h2>{{ month_label }}</h2>
+  <nav aria-label="Navigation du calendrier">
+    <a class="calendar-arrow" href="{{ url_for('calendar_view', month=previous_month, platform=selected_platforms) }}" title="Mois précédent" aria-label="Mois précédent">&#8592;</a>
+    <a href="{{ url_for('calendar_view', month=today.strftime('%Y-%m'), platform=selected_platforms) }}">Ce mois-ci</a>
+    <a class="calendar-arrow" href="{{ url_for('calendar_view', month=next_month, platform=selected_platforms) }}" title="Mois suivant" aria-label="Mois suivant">&#8594;</a>
+  </nav>
+</div>
+
+{% if not episode_count %}
+<p class="empty calendar-empty" role="status">Aucune sortie à venir connue pour ce mois et ces plateformes.</p>
+{% endif %}
+<section class="release-calendar" aria-label="Sorties de {{ month_label }}">
+  {% for weekday in ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'] %}
+    <div class="calendar-weekday">{{ weekday }}</div>
+  {% endfor %}
+  {% for week in weeks %}
+    {% for day in week %}
+    <div class="calendar-day{% if day.date.month != month.month %} outside-month{% endif %}{% if day.date == today %} today{% endif %}{% if not day.episodes %} no-releases{% endif %}">
+      <time class="calendar-date" datetime="{{ day.date.isoformat() }}"><span class="mobile-day">{{ ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'][day.date.weekday()] }} </span>{{ day.date.day }}<span class="mobile-day"> {{ month_label.split(' ')[0]|lower }}</span></time>
+      {% for episode in day.episodes %}
+      <a class="release-event" data-platform="{{ episode.platform }}" href="{{ url_for('series_detail', series_id=episode.serie_id) }}" title="{{ episode.serie_title }}{% if episode.titre_episode %} · {{ episode.titre_episode }}{% endif %}">
+        {% if episode.poster_url %}<img src="{{ episode.poster_url }}" alt="" loading="lazy">{% endif %}
+        <div>
+          <strong>{{ episode.serie_title }}</strong>
+          <span>{% if episode.saison is not none %}S{{ episode.saison }} {% endif %}{% if episode.episode is not none %}E{{ episode.episode }}{% else %}Épisode{% endif %}{% if episode.titre_episode %}<span class="release-title"> · {{ episode.titre_episode }}</span>{% endif %}</span>
+          <small>{{ platform_labels.get(episode.platform, episode.platform) }}</small>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  {% endfor %}
+</section>
+{% endblock %}

@@ -1,0 +1,6 @@
+.env
+.playwright-profile/
+artifacts/
+streaming.db
+__pycache__/
+*.py[cod]

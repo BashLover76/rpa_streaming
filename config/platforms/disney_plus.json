@@ -1,0 +1,22 @@
+{
+  "name": "disney_plus",
+  "display_name": "Disney+",
+  "country": "FR",
+  "strategy": "rpa",
+  "api": {
+    "available": false,
+    "notes": "Disney+ ne fournit pas d'historique complet utilisateur via interface publique. Le RPA analyse principalement Continuer à regarder, détails de séries et états de progression visibles."
+  },
+  "rpa": {
+    "start_url": "https://www.disneyplus.com/home",
+    "wait_after_login_seconds": 18,
+    "requires_browser_extension": true,
+    "strict_history_scope": true,
+    "selectors": {
+      "history_container": "[data-testid='cw-set-item-wrapper']",
+      "history_rows": "[data-testid='cw-set-item-wrapper']",
+      "cookie_accept": "button:has-text('Accepter'), button:has-text('Accept')",
+      "show_more": "button:has-text('Voir plus'), button:has-text('More')"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "ocs",
+  "display_name": "OCS",
+  "country": "FR",
+  "strategy": "rpa",
+  "api": {
+    "available": false,
+    "notes": "Pas d'API publique documentée pour l'historique personnel. Selon l'abonnement, certains contenus OCS peuvent être accessibles via CANAL+; dans ce cas la config canal_plus suffit."
+  },
+  "rpa": {
+    "start_url": "https://www.ocs.fr/",
+    "wait_after_login_seconds": 18,
+    "requires_browser_extension": true,
+    "selectors": {
+      "history_container": "main, [role='main'], div:has-text('Continuer'), div:has-text('Reprendre')",
+      "history_rows": "a[href*='/serie/'], a[href*='/episode/'], article, li",
+      "cookie_accept": "button:has-text('Accepter'), button:has-text('Accept')",
+      "show_more": "button:has-text('Voir plus'), button:has-text('Tout voir')"
+    }
+  }
+}

@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}{{ serie.titre }}{% endblock %}
+
+{% block content %}
+<a class="back" href="{{ url_for('index') }}">← Retour</a>
+
+<section class="detail-hero">
+  {% if serie.poster_url %}
+    <img class="poster" src="{{ serie.poster_url }}" alt="">
+  {% endif %}
+  <div>
+    <p class="eyebrow">{{ platform_labels.get(serie.platform, serie.platform) }}</p>
+    <h1>{{ serie.titre }}</h1>
+    <p>{{ status.detail }}</p>
+    {% if serie.synopsis or serie.imdb_plot %}
+      <p class="synopsis">{{ serie.synopsis or serie.imdb_plot }}</p>
+    {% endif %}
+    {% if serie.genres_list %}
+      <div class="tags">
+        {% for genre in serie.genres_list %}
+          <span>{{ genre }}</span>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% if serie.betaseries_url %}
+      <div class="link-row">
+        <a href="{{ serie.betaseries_url }}" target="_blank" rel="noreferrer">BetaSeries</a>
+        {% if serie.imdb_url %}
+          <a href="{{ serie.imdb_url }}" target="_blank" rel="noreferrer">IMDb</a>
+        {% endif %}
+      </div>
+    {% elif serie.imdb_url %}
+      <div class="link-row">
+        <a href="{{ serie.imdb_url }}" target="_blank" rel="noreferrer">IMDb</a>
+      </div>
+    {% endif %}
+  </div>
+  <div class="status {{ status.tone }}">
+    <span>Statut</span>
+    <strong>{{ status.label }}</strong>
+  </div>
+</section>
+
+<section class="detail-grid">
+  <article>
+    <h2>Historique récent</h2>
+    {% if history %}
+      <div class="episode-list compact">
+        {% for item in history %}
+          <div class="episode-row">
+            <time>{{ item.date_vu or "Date inconnue" }}</time>
+            <div>
+              <strong>
+                {% if item.saison %}S{{ item.saison }} {% endif %}
+                {% if item.episode %}E{{ item.episode }}{% else %}Visionnage{% endif %}
+              </strong>
+              <span>{{ item.raw_title or item.plateforme_source }}</span>
+              {% if item.progress_percent is not none %}
+                <small>{{ "%.0f"|format(item.progress_percent) }} %{% if item.status == "in_progress" %} · En cours de lecture{% endif %}</small>
+              {% endif %}
+              {% if item.episode_url %}
+                <a class="episode-link" href="{{ item.episode_url }}" target="_blank" rel="noreferrer">Lien plateforme</a>
+              {% endif %}
+              {% if item.sync_status %}
+                <small>
+                  BetaSeries: {{ item.sync_status }}
+                  {% if item.betaseries_episode_id %}#{{ item.betaseries_episode_id }}{% endif %}
+                </small>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">Aucun historique local pour cette série.</p>
+    {% endif %}
+  </article>
+
+  <article>
+    <h2>Détails locaux</h2>
+    <dl class="facts">
+      <div><dt>Plateforme source</dt><dd>{{ platform_labels.get(serie.platform, serie.platform) }}</dd></div>
+      <div><dt>Épisodes vus</dt><dd>{{ serie.watched_episode_count }} sur {{ serie.episodes_count if serie.episodes_count else "total inconnu" }}</dd></div>
+      <div><dt>Synchro BetaSeries</dt><dd>{{ serie.synced_count }} envoyés / {{ serie.matched_count }} prêts</dd></div>
+      <div><dt>Dates calendrier</dt><dd>{{ serie.calendar_count }}</dd></div>
+      <div><dt>Dernier visionnage</dt><dd>{{ serie.last_watched_at or "Non renseigné" }}</dd></div>
+      <div><dt>Statut BetaSeries</dt><dd>{{ serie.betaseries_status or "Non renseigné" }}</dd></div>
+      <div><dt>Saisons</dt><dd>{{ serie.seasons_count or "Non renseigné" }}</dd></div>
+      <div><dt>Épisodes</dt><dd>{{ serie.episodes_count or "Non renseigné" }}</dd></div>
+      <div><dt>Durée épisode</dt><dd>{% if serie.runtime_minutes %}{{ serie.runtime_minutes }} min{% else %}Non renseigné{% endif %}</dd></div>
+      <div><dt>Création</dt><dd>{{ serie.creation_year or "Non renseigné" }}</dd></div>
+      <div><dt>Chaîne</dt><dd>{{ serie.network or "Non renseigné" }}</dd></div>
+      <div><dt>Pays</dt><dd>{{ serie.country or "Non renseigné" }}</dd></div>
+      <div><dt>Langue originale</dt><dd>{{ serie.original_language or serie.language or "Non renseigné" }}</dd></div>
+      <div><dt>Note BetaSeries</dt><dd>{% if serie.notes_mean %}{{ "%.2f"|format(serie.notes_mean) }}/5 ({{ serie.notes_total or 0 }}){% else %}Non renseigné{% endif %}</dd></div>
+      <div><dt>Note IMDb</dt><dd>{% if serie.imdb_rating %}{{ serie.imdb_rating }}/10 ({{ serie.imdb_votes or 0 }}){% else %}Non renseigné{% endif %}</dd></div>
+      <div><dt>Type IMDb</dt><dd>{{ serie.imdb_kind or "Non renseigné" }}</dd></div>
+      <div><dt>Année IMDb</dt><dd>{{ serie.imdb_year or "Non renseigné" }}</dd></div>
+      <div><dt>Abonnés BetaSeries</dt><dd>{{ serie.followers_count or "Non renseigné" }}</dd></div>
+      <div><dt>Dernière mise à jour</dt><dd>{{ serie.last_updated_at or serie.updated_at or "Non renseigné" }}</dd></div>
+      <div><dt>BetaSeries ID</dt><dd>{{ serie.betaseries_id or "Non lié" }}</dd></div>
+    </dl>
+  </article>
+</section>
+
+<section class="detail-grid">
+  <article>
+    <h2>Prochaines sorties</h2>
+    {% if upcoming %}
+      <div class="episode-list">
+        {% for item in upcoming %}
+          <div class="episode-row">
+            <time>{{ item.date_diffusion or "Date inconnue" }}</time>
+            <div>
+              <strong>S{{ item.saison }} E{{ item.episode }}</strong>
+              <span>{{ item.titre_episode or "Titre non renseigné" }}</span>
+              {% if item.synopsis %}
+                <small>{{ item.synopsis }}</small>
+              {% endif %}
+              {% if item.episode_url %}
+                <a class="episode-link" href="{{ item.episode_url }}" target="_blank" rel="noreferrer">Voir l'épisode</a>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">Aucune sortie future connue dans la base.</p>
+    {% endif %}
+  </article>
+
+  <article>
+    <h2>Calendrier complet connu</h2>
+    {% if full_calendar %}
+      <div class="episode-list compact">
+        {% for item in full_calendar[:30] %}
+          <div class="episode-row">
+            <time>{{ item.date_diffusion or "Date inconnue" }}</time>
+            <div>
+              <strong>S{{ item.saison }} E{{ item.episode }}</strong>
+              <span>{{ item.titre_episode or "Titre non renseigné" }}</span>
+              {% if item.episode_url %}
+                <a class="episode-link" href="{{ item.episode_url }}" target="_blank" rel="noreferrer">Voir l'épisode</a>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">Aucun calendrier connu.</p>
+    {% endif %}
+  </article>
+</section>
+{% endblock %}
