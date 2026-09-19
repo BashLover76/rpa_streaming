@@ -1,50 +1,60 @@
 {% extends "base.html" %}
 
 {% block title %}{{ serie.titre }}{% endblock %}
+{% block body_class %}{% if serie.banner_url or serie.poster_url %}has-series-background{% endif %}{% endblock %}
+{% block body_style %}{% if serie.banner_url or serie.poster_url %} style="--series-background: url('{{ serie.banner_url or serie.poster_url }}')"{% endif %}{% endblock %}
 
 {% block content %}
 <a class="back" href="{{ url_for('index') }}">← Retour</a>
 
 <section class="detail-hero">
   {% if serie.poster_url %}
-    <img class="poster" src="{{ serie.poster_url }}" alt="">
-  {% endif %}
-  <div>
-    <p class="eyebrow">{{ platform_labels.get(serie.platform, serie.platform) }}</p>
-    <h1>{{ serie.titre }}</h1>
-    <p>{{ status.detail }}</p>
-    {% if serie.synopsis or serie.imdb_plot %}
-      <p class="synopsis">{{ serie.synopsis or serie.imdb_plot }}</p>
-    {% endif %}
-    {% if serie.genres_list %}
-      <div class="tags">
-        {% for genre in serie.genres_list %}
-          <span>{{ genre }}</span>
+    <div class="detail-poster">
+      <div class="detail-status">
+        <div class="status {{ status.tone }}"><span>Statut</span><strong>{{ status.label }}</strong></div>
+      </div>
+      <img class="poster" src="{{ serie.poster_url }}" alt="">
+      <div class="platform-logos" aria-label="Plateformes disponibles">
+        {% for platform in serie.platforms %}
+        <span class="platform-logo platform-{{ platform }}" title="{{ platform_labels.get(platform, platform) }}">{{ platform_labels.get(platform, platform) }}</span>
         {% endfor %}
       </div>
-    {% endif %}
-    {% if serie.betaseries_url %}
-      <div class="link-row">
-        <a href="{{ serie.betaseries_url }}" target="_blank" rel="noreferrer">BetaSeries</a>
-        {% if serie.imdb_url %}
-          <a href="{{ serie.imdb_url }}" target="_blank" rel="noreferrer">IMDb</a>
-        {% endif %}
+    </div>
+  {% endif %}
+  <div>
+    <h1>{{ serie.titre }}</h1>
+    {% if serie.synopsis or serie.imdb_plot %}<p class="synopsis">{{ serie.synopsis or serie.imdb_plot }}</p>{% endif %}
+    <div class="detail-meta">
+      {% if serie.genres_list %}
+        <div class="tags">
+          {% for genre in serie.genres_list %}<a href="{{ url_for('index', genre=genre) }}">{{ genre }}</a>{% endfor %}
+        </div>
+      {% endif %}
+      {% if serie.betaseries_status in ['ended', 'ended/canceled', 'canceled', 'cancelled', 'terminée'] %}
+        <p class="status-detail">BetaSeries indique que la série est terminée.</p>
+      {% elif serie.betaseries_status %}
+        <p class="status-detail">BetaSeries indique que la série n'est pas terminée.</p>
+      {% endif %}
+      <div class="external-links">
+        {% if serie.betaseries_url %}<a href="{{ serie.betaseries_url }}" target="_blank" rel="noreferrer">BetaSeries</a>{% endif %}
+        <a href="https://fr.wikipedia.org/wiki/Special:Search?search={{ serie.titre|urlencode }}" target="_blank" rel="noreferrer">Wikipédia</a>
+        <a href="https://news.google.com/search?q={{ serie.titre|urlencode }}&hl=fr&gl=FR&ceid=FR%3Afr" target="_blank" rel="noreferrer">Actualités</a>
       </div>
-    {% elif serie.imdb_url %}
+    </div>
+    {% if serie.imdb_url %}
       <div class="link-row">
         <a href="{{ serie.imdb_url }}" target="_blank" rel="noreferrer">IMDb</a>
       </div>
     {% endif %}
   </div>
-  <div class="status {{ status.tone }}">
-    <span>Statut</span>
-    <strong>{{ status.label }}</strong>
-  </div>
 </section>
 
+<div class="detail-layout">
+<div class="detail-column">
 <section class="detail-grid">
   <article>
-    <h2>Historique récent</h2>
+    <details open>
+    <summary><h2>Historique récent</h2></summary>
     {% if history %}
       <div class="episode-list compact">
         {% for item in history %}
@@ -53,16 +63,16 @@
             <div>
               <strong>
                 {% if item.saison %}S{{ item.saison }} {% endif %}
-                {% if item.episode %}E{{ item.episode }}{% else %}Visionnage{% endif %}
+                {% if item.episode %}E{{ item.episode }}{% elif 'épisodes regardés' in (item.raw_title or '')|lower %}Saison complète{% else %}Visionnage{% endif %}
               </strong>
-              <span>{{ item.raw_title or item.plateforme_source }}</span>
+              <span>{{ item.display_title }}</span>
               {% if item.progress_percent is not none %}
                 <small>{{ "%.0f"|format(item.progress_percent) }} %{% if item.status == "in_progress" %} · En cours de lecture{% endif %}</small>
               {% endif %}
               {% if item.episode_url %}
                 <a class="episode-link" href="{{ item.episode_url }}" target="_blank" rel="noreferrer">Lien plateforme</a>
               {% endif %}
-              {% if item.sync_status %}
+              {% if item.sync_status in ['synced', 'matched'] %}
                 <small>
                   BetaSeries: {{ item.sync_status }}
                   {% if item.betaseries_episode_id %}#{{ item.betaseries_episode_id }}{% endif %}
@@ -75,10 +85,14 @@
     {% else %}
       <p class="empty">Aucun historique local pour cette série.</p>
     {% endif %}
+    </details>
   </article>
+</section>
 
+<section class="detail-grid">
   <article>
-    <h2>Détails locaux</h2>
+    <details open>
+    <summary><h2>Détails locaux</h2></summary>
     <dl class="facts">
       <div><dt>Plateforme source</dt><dd>{{ platform_labels.get(serie.platform, serie.platform) }}</dd></div>
       <div><dt>Épisodes vus</dt><dd>{{ serie.watched_episode_count }} sur {{ serie.episodes_count if serie.episodes_count else "total inconnu" }}</dd></div>
@@ -101,12 +115,16 @@
       <div><dt>Dernière mise à jour</dt><dd>{{ serie.last_updated_at or serie.updated_at or "Non renseigné" }}</dd></div>
       <div><dt>BetaSeries ID</dt><dd>{{ serie.betaseries_id or "Non lié" }}</dd></div>
     </dl>
+    </details>
   </article>
 </section>
+</div>
 
+<div class="detail-column">
 <section class="detail-grid">
   <article>
-    <h2>Prochaines sorties</h2>
+    <details open>
+    <summary><h2>Prochaines sorties</h2></summary>
     {% if upcoming %}
       <div class="episode-list">
         {% for item in upcoming %}
@@ -128,10 +146,12 @@
     {% else %}
       <p class="empty">Aucune sortie future connue dans la base.</p>
     {% endif %}
+    </details>
   </article>
 
   <article>
-    <h2>Calendrier complet connu</h2>
+    <details open>
+    <summary><h2>Calendrier complet connu</h2></summary>
     {% if full_calendar %}
       <div class="episode-list compact">
         {% for item in full_calendar[:30] %}
@@ -150,6 +170,29 @@
     {% else %}
       <p class="empty">Aucun calendrier connu.</p>
     {% endif %}
+    </details>
   </article>
+</section>
+</div>
+</div>
+<section class="related-panel">
+  <details open>
+    <summary><h2>Séries liées et univers proche</h2></summary>
+    {% if related_series %}
+    <div class="related-grid">
+      {% for item in related_series %}
+      <a class="related-tile" href="{{ url_for('series_detail', series_id=item.id) }}">
+        <div class="related-poster">
+          {% if item.poster_url %}<img src="{{ item.poster_url }}" alt="" loading="lazy">{% endif %}
+          <span class="platform-logo tile-platform platform-{{ item.plateforme or 'unknown' }}">{{ platform_labels.get(item.plateforme or 'unknown', item.plateforme or 'unknown') }}</span>
+        </div>
+        <strong>{{ item.titre }}</strong>
+        <small>{{ item.season_count or 0 }} saison{% if item.season_count != 1 %}s{% endif %}</small>
+        <small>{{ item.episode_count or 0 }} épisodes</small>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}<p class="empty">Aucune série liée connue dans la base locale.</p>{% endif %}
+  </details>
 </section>
 {% endblock %}

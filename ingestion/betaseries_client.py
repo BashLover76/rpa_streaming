@@ -57,9 +57,8 @@ class BetaSeriesClient:
             )
             if response.is_error:
                 LOGGER.error(
-                    "BetaSeries calendar request failed: status=%s body=%s",
+                    "BetaSeries calendar request failed: status=%s",
                     response.status_code,
-                    response.text[:1000],
                 )
             response.raise_for_status()
             payload = response.json()
@@ -76,9 +75,8 @@ class BetaSeriesClient:
             )
             if response.is_error:
                 LOGGER.error(
-                    "BetaSeries member info request failed: status=%s body=%s",
+                    "BetaSeries member info request failed: status=%s",
                     response.status_code,
-                    response.text[:1000],
                 )
             response.raise_for_status()
             payload = response.json()
@@ -136,10 +134,9 @@ class BetaSeriesClient:
             )
             if response.is_error:
                 LOGGER.warning(
-                    "BetaSeries search failed for %s: status=%s body=%s",
+                    "BetaSeries search failed for %s: status=%s",
                     title,
                     response.status_code,
-                    response.text[:500],
                 )
                 return None
             shows = response.json().get("shows", [])
@@ -154,10 +151,9 @@ class BetaSeriesClient:
             )
             if response.is_error:
                 LOGGER.warning(
-                    "BetaSeries episodes failed for show %s: status=%s body=%s",
+                    "BetaSeries episodes failed for show %s: status=%s",
                     show_id,
                     response.status_code,
-                    response.text[:500],
                 )
                 return []
             return response.json().get("episodes", [])

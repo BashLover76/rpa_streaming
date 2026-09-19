@@ -17,7 +17,11 @@
 </section>
 
 <form class="filters" method="get">
-  <input name="q" value="{{ query }}" placeholder="Rechercher une série">
+  <div class="search-box">
+    <input id="series-search" name="q" value="{{ query }}" placeholder="Rechercher une série" autocomplete="off" list="series-suggestions">
+    <datalist id="series-suggestions"></datalist>
+    <button class="search-submit" type="submit" aria-label="Rechercher">GO</button>
+  </div>
   <select name="platform">
     <option value="">Toutes les plateformes</option>
     {% for item in platforms %}
@@ -26,13 +30,18 @@
       </option>
     {% endfor %}
   </select>
-  <button type="submit">Filtrer</button>
+  <select name="genre">
+    <option value="">Tous les genres</option>
+    {% for genre in genres %}
+      <option value="{{ genre }}" {% if selected_genre == genre %}selected{% endif %}>{{ genre }}</option>
+    {% endfor %}
+  </select>
 </form>
 
 <section class="platform-grid">
   {% for item in platforms %}
     <a class="platform-pill" href="{{ url_for('index', platform=item.platform) }}">
-      <span>{{ platform_labels.get(item.platform, item.platform) }}</span>
+      <span class="platform-label"><b class="platform-mark platform-{{ item.platform }}">{{ platform_labels.get(item.platform, item.platform) }}</b></span>
       <strong>{{ item.total }}</strong>
     </a>
   {% endfor %}
@@ -46,12 +55,14 @@
       {% else %}
         <div class="series-thumb placeholder"></div>
       {% endif %}
-      <div>
+      <div class="series-copy">
         <strong>{{ item.titre }}</strong>
-        <span>{{ platform_labels.get(item.plateforme, item.plateforme) }}</span>
+        <span class="platform-label"><b class="platform-mark platform-{{ item.plateforme }}">{{ platform_labels.get(item.plateforme, item.plateforme) }}</b></span>
+        {% if item.season_count %}<span>{{ item.season_count }} saison{% if item.season_count != 1 %}s{% endif %}</span>{% endif %}
+        {% if item.next_air_date %}<span class="next">Prochain: {{ item.next_air_date }}</span>{% endif %}
       </div>
       <div class="row-meta">
-        <span>{{ item.history_count }} vus</span>
+        <span>{{ item.watched_count }}/{{ item.total_episode_count or '?' }} épisodes vus</span>
         {% if item.synced_count %}
           <span>{{ item.synced_count }} sync</span>
         {% elif item.matched_count %}
@@ -69,4 +80,20 @@
     <p class="empty">Aucune série ne correspond à cette recherche.</p>
   {% endfor %}
 </section>
+<form class="list-controls" method="get">
+  <input type="hidden" name="q" value="{{ query }}"><input type="hidden" name="platform" value="{{ selected_platform }}"><input type="hidden" name="genre" value="{{ selected_genre }}">
+  <label class="page-size">Par page
+    <select name="per_page" onchange="this.form.submit()">
+      {% for size in [10, 20, 50] %}<option value="{{ size }}" {% if per_page == size %}selected{% endif %}>{{ size }}</option>{% endfor %}
+    </select>
+  </label>
+</form>
+{% if total_pages > 1 %}
+<form id="series-pagination" method="get" class="pagination" aria-label="Pagination des séries">
+  <input type="hidden" name="q" value="{{ query }}"><input type="hidden" name="platform" value="{{ selected_platform }}"><input type="hidden" name="genre" value="{{ selected_genre }}"><input type="hidden" name="per_page" value="{{ per_page }}">
+  {% if page > 1 %}<a href="{{ url_for('index', q=query, platform=selected_platform, genre=selected_genre, per_page=per_page, page=page-1) }}">Précédent</a>{% endif %}
+  <span>Page {{ page }} sur {{ total_pages }}</span>
+  {% if page < total_pages %}<a href="{{ url_for('index', q=query, platform=selected_platform, genre=selected_genre, per_page=per_page, page=page+1) }}">Suivant</a>{% endif %}
+</form>
+{% endif %}
 {% endblock %}

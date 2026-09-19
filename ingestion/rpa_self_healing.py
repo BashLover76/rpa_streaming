@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
@@ -168,7 +169,7 @@ class SelfHealingRPA:
         LOGGER.info("Starting RPA platform sync: %s", config.name)
         page.goto(config.start_url, wait_until="domcontentloaded", timeout=60_000)
         time.sleep(config.wait_after_login_seconds)
-        LOGGER.info("RPA page url=%s title=%s", page.url, page.title())
+        LOGGER.info("RPA page url=%s title=%s", _safe_page_url(page.url), page.title())
 
         self._optional_click(page, config, "cookie_accept")
         self._optional_click(page, config, "show_more")
@@ -691,3 +692,11 @@ def load_platform_configs(path: Path) -> list[PlatformConfig]:
     if isinstance(raw, list):
         return [PlatformConfig.from_dict(item) for item in raw]
     return [PlatformConfig.from_dict(raw)]
+
+
+def _safe_page_url(url: str) -> str:
+    """Remove query parameters and fragments before writing a URL to logs."""
+    parsed = urlsplit(url)
+    if not parsed.scheme or not parsed.netloc:
+        return "[invalid-url]"
+    return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"

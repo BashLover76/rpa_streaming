@@ -1,41 +1,33 @@
 {% extends "base.html" %}
 {% block title %}Calendrier des sorties{% endblock %}
 {% block content %}
-<section class="calendar-heading">
-  <h1>Calendrier des sorties</h1>
-  <span class="muted">{{ episode_count }} épisode{% if episode_count != 1 %}s{% endif %} à venir</span>
+<section class="calendar-heading calendar-title-row">
+  <h1>Séries par calendrier</h1>
+  <div class="calendar-totals"><strong>{{ month_series_count }}</strong> Séries <strong>{{ episode_count }}</strong> Épisodes <span class="sr-only">{{ episode_count }} sortie{% if episode_count != 1 %}s{% endif %}</span></div>
 </section>
 
-<form method="get" class="calendar-filters">
-  <fieldset>
-    <legend>Plateformes</legend>
-    <div class="platform-checkboxes">
+<form method="get" class="filters calendar-filters" data-ajax-calendar>
+    <div class="calendar-search-control"><input id="calendar-search" type="search" name="q" value="{{ calendar_query }}" placeholder="Rechercher une série"><button class="search-submit" type="submit" aria-label="Rechercher">GO</button></div>
+    <div class="calendar-extra-filters"><select id="calendar-genre" name="genre"><option value="">Tous les genres</option>{% for genre in genres %}<option value="{{ genre }}" {% if calendar_genre == genre %}selected{% endif %}>{{ genre }}</option>{% endfor %}</select><select id="watched-filter" name="watched"><option value="all" {% if watched_filter == 'all' %}selected{% endif %}>Tous</option><option value="watched" {% if watched_filter == 'watched' %}selected{% endif %}>Vus</option><option value="unwatched" {% if watched_filter == 'unwatched' %}selected{% endif %}>Non vus</option></select></div>
+    <div class="calendar-month-control"><label for="calendar-month">Sélection mois</label><input id="calendar-month" type="text" name="month" value="{{ month.strftime('%Y-%m') }}" inputmode="numeric" pattern="[0-9]{4}-[0-9]{2}" maxlength="7" placeholder="AAAA-MM" required></div>
+    <fieldset class="calendar-platforms"><legend>Plateformes</legend>
       {% for item in platforms %}
-      <label><input type="checkbox" name="platform" value="{{ item.platform }}" {% if item.platform in selected_platforms %}checked{% endif %}>
-        {{ platform_labels.get(item.platform, item.platform) }}
-      </label>
+      <button type="button" class="platform-filter{% if item.platform in selected_platforms %} is-selected{% endif %}" data-platform="{{ item.platform }}" aria-pressed="{{ 'true' if item.platform in selected_platforms else 'false' }}"><span class="platform-mark platform-{{ item.platform }}">{{ platform_labels.get(item.platform, item.platform) }} · {{ item.series_total }} séries / {{ item.episode_total }} épisodes</span></button>
       {% endfor %}
-    </div>
-  </fieldset>
-  <div class="calendar-filter-actions">
-    <label for="calendar-month">Mois</label>
-    <input id="calendar-month" type="month" name="month" value="{{ month.strftime('%Y-%m') }}" min="1900-01" max="9998-12" required>
-    <button type="submit">Filtrer</button>
-    <a href="{{ url_for('calendar_view', month=month.strftime('%Y-%m')) }}">Toutes les plateformes</a>
-  </div>
+    </fieldset>
 </form>
 
 <div class="calendar-toolbar">
   <h2>{{ month_label }}</h2>
   <nav aria-label="Navigation du calendrier">
-    <a class="calendar-arrow" href="{{ url_for('calendar_view', month=previous_month, platform=selected_platforms) }}" title="Mois précédent" aria-label="Mois précédent">&#8592;</a>
-    <a href="{{ url_for('calendar_view', month=today.strftime('%Y-%m'), platform=selected_platforms) }}">Ce mois-ci</a>
-    <a class="calendar-arrow" href="{{ url_for('calendar_view', month=next_month, platform=selected_platforms) }}" title="Mois suivant" aria-label="Mois suivant">&#8594;</a>
+    <a class="calendar-arrow" href="{{ url_for('calendar_view', month=previous_month, platform=selected_platforms, watched=watched_filter, q=calendar_query, genre=calendar_genre) }}" title="Mois précédent" aria-label="Mois précédent">&#8592;</a>
+    <a href="{{ url_for('calendar_view', month=today.strftime('%Y-%m'), platform=selected_platforms, watched=watched_filter, q=calendar_query, genre=calendar_genre) }}">Ce mois-ci</a>
+    <a class="calendar-arrow" href="{{ url_for('calendar_view', month=next_month, platform=selected_platforms, watched=watched_filter, q=calendar_query, genre=calendar_genre) }}" title="Mois suivant" aria-label="Mois suivant">&#8594;</a>
   </nav>
 </div>
 
 {% if not episode_count %}
-<p class="empty calendar-empty" role="status">Aucune sortie à venir connue pour ce mois et ces plateformes.</p>
+<p class="empty calendar-empty" role="status">Aucune sortie connue pour ce mois et ces filtres.</p>
 {% endif %}
 <section class="release-calendar" aria-label="Sorties de {{ month_label }}">
   {% for weekday in ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'] %}
@@ -47,7 +39,14 @@
       <time class="calendar-date" datetime="{{ day.date.isoformat() }}"><span class="mobile-day">{{ ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'][day.date.weekday()] }} </span>{{ day.date.day }}<span class="mobile-day"> {{ month_label.split(' ')[0]|lower }}</span></time>
       {% for episode in day.episodes %}
       <a class="release-event" data-platform="{{ episode.platform }}" href="{{ url_for('series_detail', series_id=episode.serie_id) }}" title="{{ episode.serie_title }}{% if episode.titre_episode %} · {{ episode.titre_episode }}{% endif %}">
-        {% if episode.poster_url %}<img src="{{ episode.poster_url }}" alt="" loading="lazy">{% endif %}
+        <div class="release-media">
+          {% if episode.poster_url %}<img src="{{ episode.poster_url }}" alt="" loading="lazy">{% endif %}
+          {% if episode.watched %}
+          <span class="watched-mark is-watched" title="Episode vu" aria-label="Episode vu"></span>
+          {% else %}
+          <span class="watched-mark is-unwatched" title="Episode non vu" aria-label="Episode non vu"></span>
+          {% endif %}
+        </div>
         <div>
           <strong>{{ episode.serie_title }}</strong>
           <span>{% if episode.saison is not none %}S{{ episode.saison }} {% endif %}{% if episode.episode is not none %}E{{ episode.episode }}{% else %}Épisode{% endif %}{% if episode.titre_episode %}<span class="release-title"> · {{ episode.titre_episode }}</span>{% endif %}</span>

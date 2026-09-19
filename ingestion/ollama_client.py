@@ -80,7 +80,7 @@ class OllamaClient:
                 if response.status_code >= 400:
                     response.read()
                     raise RuntimeError(
-                        f"Ollama HTTP {response.status_code}, model={self.model}: {response.text[:500]}"
+                        f"Ollama HTTP {response.status_code}, model={self.model}"
                     )
                 for line in response.iter_lines():
                     if not line.strip():
