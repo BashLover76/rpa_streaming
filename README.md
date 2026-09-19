@@ -85,13 +85,16 @@ python main_ingestion.py --platform crunchyroll --skip-rpa --skip-betaseries
 
 ## Calendrier web
 
-La vue `/calendar` affiche les prochaines sorties connues dans SQLite, par
-mois. Les cases a cocher permettent de combiner plusieurs plateformes; sans
-selection, toutes sont affichees. Les filtres sont conserves lors du passage
-au mois precedent ou suivant. Chaque episode ouvre la fiche de sa serie.
+La vue `/calendar` affiche l'historique complet des sorties connues dans
+SQLite, par mois. Chaque episode porte un indicateur `vu` calcule depuis la
+table `history`. Le filtre de visionnage permet d'afficher toutes les sorties,
+uniquement les episodes vus ou uniquement les episodes non vus. Les cases a
+cocher permettent de combiner plusieurs plateformes; sans selection, toutes
+sont affichees. Les filtres sont conserves lors du passage au mois precedent
+ou suivant. Chaque episode ouvre la fiche de sa serie.
 Sur mobile, les sorties sont regroupees par jour plutot que dans une grille.
-Les dates passees et les episodes sans date ne sont pas affiches. La date du
-jour utilise le fuseau Europe/Paris. Les dates sont celles du calendrier
+Les episodes sans date ne sont pas affiches. La date du jour utilise le fuseau
+Europe/Paris. Les dates sont celles du calendrier
 enregistre, pas une garantie de disponibilite locale sur la plateforme.
 
 Cette vue ne lance aucune synchronisation. Pour voir de nouvelles dates,
@@ -118,8 +121,9 @@ serveur tourne sans rechargement automatique.
 
 ## Administration et suppression
 
-La page `/admin` permet de supprimer une série de la base locale. La
-confirmation exige de saisir `SUPPRIMER`; une copie SQLite horodatée est
+La page `/admin` permet de supprimer une série de la base locale. Elle est
+protégée par une authentification HTTP Basic (`admin` + `ADMIN_TOKEN` défini
+dans `.env`). La confirmation exige de saisir `SUPPRIMER`; une copie SQLite horodatée est
 créée dans `backups/` avant l'opération. Cette action ne modifie aucun compte
 de streaming et ne désabonne pas la série de BetaSeries.
 

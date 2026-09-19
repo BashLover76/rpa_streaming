@@ -25,6 +25,7 @@ class Settings:
     platform_config_path: Path
     rpa_browser_extension_path: Path | None
     rpa_cdp_url: str
+    admin_token: str
     crunchyroll_email: str
     crunchyroll_password: str
     crunchyroll_authorization: str
@@ -56,6 +57,7 @@ class Settings:
             ),
             rpa_browser_extension_path=Path(extension_path) if extension_path else None,
             rpa_cdp_url=os.getenv("RPA_CDP_URL", "").strip(),
+            admin_token=os.getenv("ADMIN_TOKEN", "").strip(),
             crunchyroll_email=os.getenv("CRUNCHYROLL_EMAIL", ""),
             crunchyroll_password=os.getenv("CRUNCHYROLL_PASSWORD", ""),
             crunchyroll_authorization=os.getenv("CRUNCHYROLL_AUTHORIZATION", ""),

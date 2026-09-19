@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Streaming Dashboard{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
   </head>
-  <body>
+  <body class="{% block body_class %}{% endblock %}"{% block body_style %}{% endblock %}>
     <header class="topbar">
       <a class="brand" href="{{ url_for('index') }}">Streaming DB</a>
       <nav>
@@ -15,7 +16,7 @@
         <a href="{{ url_for('admin_view') }}" {% if request.endpoint == 'admin_view' %}aria-current="page"{% endif %}>Admin</a>
       </nav>
     </header>
-    <main class="page">
+    <main class="page{% block main_class %}{% endblock %}"{% block main_style %}{% endblock %}>
       {% block content %}{% endblock %}
     </main>
   </body>
