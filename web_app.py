@@ -121,6 +121,14 @@ def create_app() -> Flask:
             total_pages=max(1, (total_series + per_page - 1) // per_page),
         )
 
+    @app.get("/movies")
+    def movies_view():
+        query = request.args.get("q", "").strip()
+        movies = fetch_movies(query)
+        return render_template(
+            "movies.html", movies=movies, query=query, platform_labels=PLATFORM_LABELS
+        )
+
     @app.get("/series/<int:series_id>")
     def series_detail(series_id: int):
         serie = fetch_series(series_id)
@@ -289,6 +297,29 @@ def fetch_platforms() -> list[dict[str, Any]]:
         GROUP BY COALESCE(plateforme, 'unknown')
         ORDER BY total DESC, platform
         """).fetchall()
+    return [dict(row) for row in rows]
+
+
+def fetch_movies(query: str = "") -> list[dict[str, Any]]:
+    params: list[Any] = []
+    where = ["LOWER(COALESCE(s.imdb_kind, '')) IN ('movie', 'film')"]
+    if query:
+        where.append("LOWER(s.titre) LIKE LOWER(?)")
+        params.append(f"%{query}%")
+    rows = (
+        get_db()
+        .execute(
+            f"""
+        SELECT s.id, s.titre, s.poster_url, COALESCE(s.plateforme, 'unknown') AS platform,
+               s.synopsis, s.creation_year, s.imdb_rating
+        FROM series AS s
+        WHERE {' AND '.join(where)}
+        ORDER BY s.titre COLLATE NOCASE
+        """,
+            params,
+        )
+        .fetchall()
+    )
     return [dict(row) for row in rows]
 
 

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Films{% endblock %}
+{% block content %}
+<section class="summary">
+  <div><h1>Films</h1><p>Historique et catalogue des films issus des plateformes.</p></div>
+</section>
+<form class="filters" method="get">
+  <input name="q" value="{{ query }}" placeholder="Rechercher un film">
+  <button class="search-submit" type="submit">GO</button>
+</form>
+<section class="movie-grid">
+  {% for movie in movies %}
+  <a class="movie-card" href="{{ url_for('series_detail', series_id=movie.id) }}">
+    {% if movie.poster_url %}<img src="{{ movie.poster_url }}" alt="" loading="lazy">{% endif %}
+    <strong>{{ movie.titre }}</strong>
+    <span>{{ platform_labels.get(movie.platform, movie.platform) }}</span>
+    {% if movie.creation_year %}<small>{{ movie.creation_year }}</small>{% endif %}
+  </a>
+  {% else %}<p class="empty">Aucun film trouvé.</p>{% endfor %}
+</section>
+{% endblock %}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import date, timedelta
 from typing import Any
 
@@ -29,6 +30,55 @@ class BetaSeriesClient:
         self.access_token = access_token
         self.db = db
         self._member_id = member_id
+        self._title_search_cache = {}
+        self._title_details_cache = {}
+
+    def _get_json(
+        self,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        timeout: float = 45.0,
+        retries: int = 2,
+        retry_statuses: tuple[int, ...] = (429, 500, 502, 503, 504),
+    ) -> dict[str, Any]:
+        last_error: Exception | None = None
+        url = f"{self.BASE_URL}/{path.lstrip('/')}"
+        for attempt in range(retries + 1):
+            try:
+                with httpx.Client(timeout=timeout) as client:
+                    response = client.get(
+                        url,
+                        headers=self._headers(),
+                        params=params,
+                    )
+                if response.status_code in retry_statuses and attempt < retries:
+                    LOGGER.warning(
+                        "BetaSeries GET %s returned %s; retrying",
+                        path,
+                        response.status_code,
+                    )
+                    time.sleep(1.5 * (attempt + 1))
+                    continue
+                if response.is_error:
+                    LOGGER.warning(
+                        "BetaSeries GET %s failed: status=%s body=%s",
+                        path,
+                        response.status_code,
+                        response.text[:500],
+                    )
+                response.raise_for_status()
+                payload = response.json()
+                return payload if isinstance(payload, dict) else {}
+            except (httpx.TimeoutException, httpx.NetworkError) as exc:
+                last_error = exc
+                if attempt >= retries:
+                    break
+                LOGGER.warning("BetaSeries GET %s timed out; retrying", path)
+                time.sleep(1.5 * (attempt + 1))
+        raise RuntimeError(
+            f"BetaSeries GET {path} failed after retries"
+        ) from last_error
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -49,37 +99,14 @@ class BetaSeriesClient:
             "after": days_after,
             "unseen": "false",
         }
-        with httpx.Client(timeout=30.0) as client:
-            response = client.get(
-                f"{self.BASE_URL}/planning/member",
-                headers=self._headers(),
-                params=params,
-            )
-            if response.is_error:
-                LOGGER.error(
-                    "BetaSeries calendar request failed: status=%s",
-                    response.status_code,
-                )
-            response.raise_for_status()
-            payload = response.json()
+        payload = self._get_json("planning/member", params=params)
         return payload.get("episodes", [])
 
     def fetch_member_id(self) -> int:
         if self._member_id is not None:
             return self._member_id
 
-        with httpx.Client(timeout=30.0) as client:
-            response = client.get(
-                f"{self.BASE_URL}/members/infos",
-                headers=self._headers(),
-            )
-            if response.is_error:
-                LOGGER.error(
-                    "BetaSeries member info request failed: status=%s",
-                    response.status_code,
-                )
-            response.raise_for_status()
-            payload = response.json()
+        payload = self._get_json("members/infos")
 
         member = payload.get("member") or payload.get("user") or {}
         member_id = member.get("id")
@@ -126,37 +153,95 @@ class BetaSeriesClient:
         return count
 
     def search_show(self, title: str) -> dict[str, Any] | None:
-        with httpx.Client(timeout=30.0) as client:
-            response = client.get(
-                f"{self.BASE_URL}/shows/search",
-                headers=self._headers(),
-                params={"title": title},
+        try:
+            shows = self._get_json("shows/search", params={"title": title}).get(
+                "shows", []
             )
-            if response.is_error:
-                LOGGER.warning(
-                    "BetaSeries search failed for %s: status=%s",
-                    title,
-                    response.status_code,
-                )
-                return None
-            shows = response.json().get("shows", [])
+        except RuntimeError as exc:
+            LOGGER.warning("BetaSeries search failed for %s: %s", title, exc)
+            return None
         return shows[0] if shows else None
 
-    def fetch_show_episodes(self, show_id: int | str) -> list[dict[str, Any]]:
-        with httpx.Client(timeout=30.0) as client:
-            response = client.get(
-                f"{self.BASE_URL}/shows/episodes",
-                headers=self._headers(),
-                params={"id": show_id},
+    def search_titles(self, title: str, kind: str) -> list[dict[str, Any]]:
+        cache_key = (title, kind)
+        if cache_key in self._title_search_cache:
+            return self._title_search_cache[cache_key]
+        resource = "movies" if kind == "movie" else "shows"
+        results = self._get_json(f"{resource}/search", params={"title": title}).get(
+            resource, []
+        )
+        self._title_search_cache[cache_key] = results
+        return results
+
+    def title_details(
+        self, title_id: int | str, kind: str, *, imdb: bool = False
+    ) -> dict:
+        cache_key = (title_id, kind, imdb)
+        if cache_key in self._title_details_cache:
+            return self._title_details_cache[cache_key]
+        endpoint, key = (
+            ("movies/movie", "movie") if kind == "movie" else ("shows/display", "show")
+        )
+        try:
+            details = self._get_json(
+                endpoint,
+                params={"imdb_id" if imdb else "id": title_id},
+            ).get(key, {})
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                return {}
+            raise
+        self._title_details_cache[cache_key] = details
+        return details
+
+    def search_movie(self, title: str) -> dict[str, Any] | None:
+        """Find a BetaSeries movie without confusing it with a TV show."""
+        try:
+            movies = self._get_json("movies/search", params={"title": title}).get(
+                "movies", []
             )
-            if response.is_error:
-                LOGGER.warning(
-                    "BetaSeries episodes failed for show %s: status=%s",
-                    show_id,
-                    response.status_code,
+        except RuntimeError as exc:
+            LOGGER.warning("BetaSeries movie search failed for %s: %s", title, exc)
+            return None
+        return movies[0] if movies else None
+
+    def sync_movies(self, titles: list[str]) -> int:
+        """Synchronize movie metadata into the shared content table."""
+        synced = 0
+        for title in titles:
+            movie = self.search_movie(title)
+            if not movie:
+                LOGGER.warning("BetaSeries movie not found for title: %s", title)
+                continue
+            movie_id = movie.get("id")
+            self.db.upsert_series(
+                title=movie.get("title") or title,
+                betaseries_id=movie_id,
+                platform=movie.get("platform"),
+                synopsis=movie.get("description") or movie.get("synopsis"),
+                poster_url=self._pick_image_url(movie, preferred=("poster", "movie")),
+                banner_url=self._pick_image_url(
+                    movie, preferred=("banner", "background")
+                ),
+                genres=movie.get("genres"),
+                creation_year=movie.get("release_date") or movie.get("production_year"),
+            )
+            with self.db.connect() as conn:
+                conn.execute(
+                    "UPDATE series SET imdb_kind = 'movie', updated_at = CURRENT_TIMESTAMP WHERE betaseries_id = ?",
+                    (movie_id,),
                 )
-                return []
-            return response.json().get("episodes", [])
+            synced += 1
+        return synced
+
+    def fetch_show_episodes(self, show_id: int | str) -> list[dict[str, Any]]:
+        try:
+            return self._get_json("shows/episodes", params={"id": show_id}).get(
+                "episodes", []
+            )
+        except RuntimeError as exc:
+            LOGGER.warning("BetaSeries episodes failed for show %s: %s", show_id, exc)
+            return []
 
     def find_episode(
         self,
@@ -237,6 +322,49 @@ class BetaSeriesClient:
             )
             count += 1
         LOGGER.info("BetaSeries local series metadata enriched: %s", count)
+        return count
+
+    def enrich_local_movies(
+        self, *, platform: str | None = None, limit: int = 500
+    ) -> int:
+        """Fill missing movie metadata without treating movie titles as shows."""
+        query = """
+            SELECT id, titre
+            FROM series
+            WHERE LOWER(COALESCE(imdb_kind, '')) IN ('movie', 'film')
+              AND (poster_url IS NULL OR banner_url IS NULL OR synopsis IS NULL
+                   OR betaseries_id IS NULL)
+        """
+        params: list[Any] = []
+        if platform:
+            query += " AND plateforme = ?"
+            params.append(platform)
+        query += " ORDER BY updated_at ASC LIMIT ?"
+        params.append(limit)
+
+        with self.db.connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+
+        count = 0
+        for row in rows:
+            movie = self.search_movie(str(row["titre"]))
+            if not movie:
+                continue
+            self.db.update_series_metadata(
+                int(row["id"]),
+                betaseries_id=movie.get("id"),
+                title=movie.get("title") or movie.get("original_title"),
+                synopsis=movie.get("synopsis") or movie.get("description"),
+                poster_url=movie.get("poster"),
+                banner_url=movie.get("backdrop"),
+                betaseries_url=movie.get("resource_url") or movie.get("url"),
+                genres=movie.get("genres"),
+                creation_year=movie.get("production_year"),
+                runtime_minutes=(movie.get("length") or 0) // 60 or None,
+                language=movie.get("language"),
+            )
+            count += 1
+        LOGGER.info("BetaSeries local movie metadata enriched: %s", count)
         return count
 
     def _find_local_series_id_by_betaseries_id(

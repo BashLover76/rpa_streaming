@@ -14,7 +14,7 @@ def history_from_cards(rows: list[str]) -> list[dict]:
         title = card.get("title", "").strip()
         url = card.get("episode_url")
         match = re.search(r"\bE(\d+)\b", card.get("episode_text", ""), re.IGNORECASE)
-        if not title or not url or not match:
+        if not title or not url:
             continue
         season = re.search(
             r"\bS(\d+)\b|(?:Saison|Season)\s+(\d+)", card.get("text", ""), re.IGNORECASE
@@ -37,7 +37,7 @@ def history_from_cards(rows: list[str]) -> list[dict]:
                     if season
                     else None
                 ),
-                "episode": int(match.group(1)),
+                "episode": int(match.group(1)) if match else None,
                 "episode_title": card.get("episode_text", "").split(" - ", 1)[-1],
                 "episode_url": urljoin("https://www.crunchyroll.com", url),
                 "watched_at": watched_at,

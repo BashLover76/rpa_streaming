@@ -186,7 +186,7 @@ class CrunchyrollAPIBackend:
             "season": getattr(item, "season", None),
             "episode": getattr(item, "episode_number", None)
             or getattr(item, "episode", None),
-            "watched_at": date.today().isoformat() if watched else None,
+            "watched_at": getattr(item, "watched_at", None) if watched else None,
             "platform": "crunchyroll",
             "raw_title": getattr(item, "long_title", None)
             or getattr(item, "title", None),

@@ -1,32 +1,64 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import fcntl
 import logging
 import time
+from pathlib import Path
+from typing import Iterator
+
+import httpx
 
 from ingestion.betaseries_client import BetaSeriesClient
 from ingestion.crunchyroll_client import CrunchyrollClient, CrunchyrollCredentials
 from ingestion.db import StreamingDB
+from ingestion.logging_config import configure_logging
 from ingestion.ollama_client import OllamaClient
 from ingestion.rpa_self_healing import SelfHealingRPA, load_platform_configs
 from ingestion.settings import Settings
-
-
-def configure_logging() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    )
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+from ingestion.catalog_pipeline import CatalogPipeline
+from ingestion.title_resolution import IMDbClient, TitleResolver
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Streaming ingestion orchestrator")
     parser.add_argument("--skip-betaseries", action="store_true")
     parser.add_argument("--skip-crunchyroll-api", action="store_true")
-    parser.add_argument("--skip-crunchyroll-watchlist", action="store_true")
+    parser.add_argument(
+        "--skip-crunchyroll-watchlist",
+        action="store_true",
+        help="Compatibility option: watchlists are no longer imported as history.",
+    )
     parser.add_argument("--skip-crunchyroll-history", action="store_true")
     parser.add_argument("--skip-rpa", action="store_true")
+    parser.add_argument(
+        "--rpa-mode",
+        choices=("full", "differential"),
+        default="full",
+        help="RPA collection mode: full scrolls to the configured limits; differential stops after known history cards.",
+    )
+    parser.add_argument(
+        "--rpa-differential-known-threshold",
+        type=int,
+        default=20,
+        help="Consecutive already-known cards before stopping a differential RPA run.",
+    )
+    parser.add_argument(
+        "--content-type",
+        choices=("all", "series", "movie"),
+        default="all",
+        help="Deprecated: history now always collects both movies and series.",
+    )
+    parser.add_argument(
+        "--reconcile-existing",
+        action="store_true",
+        help="Back up, reidentify and deduplicate existing local records.",
+    )
+    parser.add_argument("--retry-unresolved", action="store_true")
+    parser.add_argument(
+        "--skip-resolution", action="store_true", help="Collect raw history only."
+    )
     parser.add_argument("--headless", action="store_true")
     parser.add_argument(
         "--platform",
@@ -37,9 +69,22 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Connect to an already running Chrome through CDP, e.g. http://127.0.0.1:9222",
     )
+    parser.add_argument(
+        "--cdp-timeout-ms",
+        type=int,
+        default=None,
+        help="Maximum time to attach to Chrome CDP before skipping RPA.",
+    )
     parser.add_argument("--pause-seconds", type=float, default=2.0)
     parser.add_argument("--betaseries-days-before", type=int, default=30)
     parser.add_argument("--betaseries-days-after", type=int, default=90)
+    parser.add_argument(
+        "--lock-file",
+        type=Path,
+        default=Path(".continue/ingestion.lock"),
+        help="Prevent concurrent ingestion runs with a filesystem lock.",
+    )
+    parser.add_argument("--no-lock", action="store_true")
     return parser.parse_args()
 
 
@@ -55,20 +100,25 @@ def build_betaseries_client(settings: Settings, db: StreamingDB) -> BetaSeriesCl
 
 
 def main() -> None:
-    configure_logging()
     args = parse_args()
+    configure_logging("ingestion", platform=args.platform)
+    with _ingestion_lock(args.lock_file, disabled=args.no_lock):
+        run(args)
+
+
+def run(args: argparse.Namespace) -> None:
     settings = Settings.from_env()
     db = StreamingDB(settings.db_path)
     db.init_schema()
+    collector_db = StreamingDB(settings.db_path, stage_history=True)
+    if args.content_type != "all":
+        logging.warning(
+            "--content-type is deprecated: collecting all history; IMDb determines the type."
+        )
 
     beta = None
     if not args.skip_betaseries:
         beta = build_betaseries_client(settings, db)
-        beta.sync_calendar(
-            days_before=args.betaseries_days_before,
-            days_after=args.betaseries_days_after,
-        )
-        time.sleep(args.pause_seconds)
 
     if (
         not args.skip_crunchyroll_api
@@ -84,18 +134,10 @@ def main() -> None:
                     profile_id=settings.crunchyroll_profile_id or None,
                     locale=settings.crunchyroll_locale,
                 ),
-                db=db,
+                db=collector_db,
             )
             if not args.skip_crunchyroll_history:
                 crunchyroll.sync_history()
-            if not args.skip_crunchyroll_watchlist:
-                crunchyroll.sync_watchlist()
-            if not args.skip_betaseries:
-                beta = beta or build_betaseries_client(settings, db)
-                beta.sync_calendar_for_titles(
-                    db.list_series_titles(platform="crunchyroll"),
-                    days_after=args.betaseries_days_after,
-                )
             time.sleep(args.pause_seconds)
         except RuntimeError as exc:
             logging.getLogger(__name__).warning("Crunchyroll API skipped: %s", exc)
@@ -117,15 +159,63 @@ def main() -> None:
             ]
             if not platform_configs:
                 raise SystemExit(f"Unknown platform: {args.platform}")
+        for platform_config in platform_configs:
+            platform_config.content_type = args.content_type
         rpa = SelfHealingRPA(
-            db=db,
+            db=collector_db,
             ollama=ollama,
             user_data_dir=settings.rpa_user_data_dir,
             headless=args.headless,
             browser_extension_path=settings.rpa_browser_extension_path,
             cdp_url=args.cdp_url or settings.rpa_cdp_url or None,
+            cdp_timeout_ms=args.cdp_timeout_ms or settings.rpa_cdp_timeout_ms,
+            rpa_mode=args.rpa_mode,
+            differential_known_threshold=args.rpa_differential_known_threshold,
         )
         rpa.run_platforms(platform_configs)
+
+    if not args.skip_resolution:
+        with httpx.Client(timeout=30.0) as client:
+            pipeline = CatalogPipeline(db, TitleResolver(IMDbClient(client), beta))
+            logging.info(
+                "Existing catalog: %s",
+                pipeline.reconcile_existing(
+                    platform=args.platform,
+                    only_unverified=not args.reconcile_existing,
+                ),
+            )
+            pipeline.run(platform=args.platform, retry=args.retry_unresolved)
+    if beta:
+        try:
+            beta.sync_calendar(
+                days_before=args.betaseries_days_before,
+                days_after=args.betaseries_days_after,
+            )
+        except (httpx.HTTPError, RuntimeError) as exc:
+            logging.getLogger(__name__).warning(
+                "BetaSeries calendar skipped after ingestion: %s", exc
+            )
+
+
+@contextlib.contextmanager
+def _ingestion_lock(path: Path, *, disabled: bool = False) -> Iterator[None]:
+    if disabled:
+        yield
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise SystemExit(
+                f"Another ingestion run is already active: {path}"
+            ) from exc
+        handle.write(f"{time.time():.0f}\n")
+        handle.flush()
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 if __name__ == "__main__":

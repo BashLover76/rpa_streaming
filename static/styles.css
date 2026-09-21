@@ -323,6 +323,10 @@ button {
   display: grid;
   gap: 8px;
 }
+.movie-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
+.movie-card { display: grid; gap: 7px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.movie-card img { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 5px; background: var(--panel-2); }
+.movie-card span, .movie-card small { color: var(--muted); }
 
 .series-row {
   display: grid;

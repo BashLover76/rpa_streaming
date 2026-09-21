@@ -1,0 +1,8 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Full ingestion every day at 04:00.
+0 4 * * * cd /rpa_streaming && ./.venv/bin/python main_ingestion.py --cdp-url http://127.0.0.1:9222 --cdp-timeout-ms 30000 --rpa-mode full --skip-crunchyroll-api --reconcile-existing --retry-unresolved
+
+# Differential ingestion every 4 hours, with the 04:00 slot handled by the full run.
+0 0,8,12,16,20 * * * cd /rpa_streaming && ./.venv/bin/python main_ingestion.py --cdp-url http://127.0.0.1:9222 --cdp-timeout-ms 30000 --rpa-mode differential --skip-crunchyroll-api

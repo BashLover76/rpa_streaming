@@ -6,6 +6,7 @@ from pathlib import Path
 
 import httpx
 
+from ingestion.logging_config import configure_logging
 from ingestion.ollama_client import OllamaClient
 from ingestion.settings import Settings
 
@@ -16,7 +17,7 @@ def main() -> None:
     )
     parser.add_argument("--image", type=Path, help="Optional screenshot to test vision")
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO)
+    configure_logging("diagnostics")
     settings = Settings.from_env()
     print(f"Endpoint: {settings.ollama_base_url}; model: {settings.ollama_model}")
     with httpx.Client(timeout=10) as client:

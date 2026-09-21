@@ -10,11 +10,15 @@
   "rpa": {
     "start_url": "https://www.primevideo.com/settings/watch-history",
     "wait_after_login_seconds": 15,
+    "max_scroll_steps": 300,
+    "scroll_wait_ms": 750,
     "requires_browser_extension": false,
+    "strict_history_scope": true,
     "selectors": {
       "history_container": "[data-testid='activity-history-items']",
       "history_rows": "[data-testid='activity-history-item']",
       "cookie_accept": "button:has-text('Accepter'), button:has-text('Accept')",
+      "expand_episodes": "button:has-text('Voir les épisodes'), button:has-text('Voir épisodes'), button:has-text('View episodes'), button:has-text('Episodes')",
       "show_more": "button:has-text('Plus'), button:has-text('More'), button:has-text('Afficher')"
     }
   }

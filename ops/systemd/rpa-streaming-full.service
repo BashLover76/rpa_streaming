@@ -1,0 +1,9 @@
+[Unit]
+Description=RPA Streaming full ingestion
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/rpa_streaming
+ExecStart=%h/rpa_streaming/.venv/bin/python %h/rpa_streaming/main_ingestion.py --cdp-url http://127.0.0.1:9222 --cdp-timeout-ms 30000 --rpa-mode full --skip-crunchyroll-api --reconcile-existing --retry-unresolved

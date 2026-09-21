@@ -6,6 +6,7 @@ from typing import Any
 
 from ingestion.betaseries_client import BetaSeriesClient
 from ingestion.db import StreamingDB
+from ingestion.logging_config import configure_logging
 from ingestion.settings import Settings
 
 LOGGER = logging.getLogger(__name__)
@@ -129,13 +130,13 @@ def episode_id_from_payload(episode: dict[str, Any]) -> int | None:
         return None
     try:
         return int(raw_id)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
 def main() -> None:
     args = parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    configure_logging("sync", platform=args.platform)
 
     settings = Settings.from_env()
     db = StreamingDB(settings.db_path)

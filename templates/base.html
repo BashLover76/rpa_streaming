@@ -12,6 +12,7 @@
       <a class="brand" href="{{ url_for('index') }}">Streaming DB</a>
       <nav>
         <a href="{{ url_for('index') }}">Séries</a>
+        <a href="{{ url_for('movies_view') }}" {% if request.endpoint == 'movies_view' %}aria-current="page"{% endif %}>Films</a>
         <a href="{{ url_for('calendar_view') }}" {% if request.endpoint == 'calendar_view' %}aria-current="page"{% endif %}>Calendrier</a>
         <a href="{{ url_for('admin_view') }}" {% if request.endpoint == 'admin_view' %}aria-current="page"{% endif %}>Admin</a>
       </nav>

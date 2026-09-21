@@ -1,0 +1,10 @@
+[Unit]
+Description=Run RPA Streaming differential ingestion every 4 hours except the 04:00 full run
+
+[Timer]
+OnCalendar=*-*-* 00,08,12,16,20:00:00
+Persistent=true
+Unit=rpa-streaming-differential.service
+
+[Install]
+WantedBy=timers.target
