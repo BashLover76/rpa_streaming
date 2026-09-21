@@ -244,6 +244,47 @@ class HistoryProgressTests(unittest.TestCase):
             )
         self.assertEqual(len(rows), 2)
 
+    def test_differential_collects_only_unknown_cards(self):
+        page = MagicMock()
+        page.locator.return_value.first.evaluate.return_value = False
+        page.locator.return_value.first.is_visible.return_value = False
+        known = json.dumps(
+            {
+                "title": "Known",
+                "episode_url": "https://example.com/watch/1",
+                "date_text": "01/09/2026",
+            }
+        )
+        new = json.dumps(
+            {
+                "title": "New",
+                "episode_url": "https://example.com/watch/2",
+                "date_text": "02/09/2026",
+            }
+        )
+        self.db.record_history_cards("netflix", [known])
+        rpa = SelfHealingRPA(
+            db=self.db,
+            ollama=None,
+            user_data_dir=Path(self.folder.name),
+            artifacts_dir=Path(self.folder.name),
+            rpa_mode="differential",
+            differential_known_threshold=2,
+        )
+        with patch.object(
+            rpa,
+            "_collect_history_rows",
+            side_effect=[[new], [known], [known]],
+        ):
+            rows = rpa._collect_all_history(
+                page,
+                PlatformConfig("netflix", "", {}, max_scroll_steps=5),
+                "selector",
+                "container",
+            )
+
+        self.assertEqual(rows, [new])
+
 
 if __name__ == "__main__":
     unittest.main()

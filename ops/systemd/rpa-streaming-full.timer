@@ -1,0 +1,10 @@
+[Unit]
+Description=Run RPA Streaming full ingestion every day at 04:00
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+Unit=rpa-streaming-full.service
+
+[Install]
+WantedBy=timers.target

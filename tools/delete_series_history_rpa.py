@@ -16,6 +16,7 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
+from ingestion.logging_config import configure_logging, platform_log_context
 from ingestion.rpa_self_healing import load_platform_configs
 from ingestion.settings import Settings
 
@@ -49,6 +50,12 @@ def main() -> None:
         "--artifacts-dir", type=Path, default=Path("artifacts/rpa/delete-history")
     )
     args = parser.parse_args()
+    configure_logging(
+        "rpa-delete",
+        platform=(
+            args.platform[0] if args.platform and len(args.platform) == 1 else None
+        ),
+    )
     if args.apply and args.confirm_title != args.title:
         raise SystemExit(
             "Refusing deletion: --confirm-title must exactly match --title"
@@ -87,7 +94,8 @@ def main() -> None:
             for platform_config in platform_configs:
                 page = context.new_page()
                 try:
-                    _process_platform(page, platform_config, args)
+                    with platform_log_context(platform_config.name):
+                        _process_platform(page, platform_config, args)
                 except Exception:
                     LOGGER.exception(
                         "History deletion failed for %s", platform_config.name
@@ -184,7 +192,4 @@ def _process_platform(page, config, args) -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
-    )
     main()

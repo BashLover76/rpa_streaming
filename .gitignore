@@ -4,6 +4,7 @@
 .playwright-profile/
 artifacts/
 backups/
+logs/
 streaming.db
 __pycache__/
 *.py[cod]

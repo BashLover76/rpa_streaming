@@ -3,14 +3,16 @@ from __future__ import annotations
 import sqlite3
 import json
 import unicodedata
+import hashlib
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
 
 class StreamingDB:
-    def __init__(self, db_path: Path | str) -> None:
+    def __init__(self, db_path: Path | str, *, stage_history: bool = False) -> None:
         self.db_path = Path(db_path)
+        self.stage_history = stage_history
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
@@ -110,10 +112,31 @@ class StreamingDB:
                     serie_id INTEGER NOT NULL REFERENCES series(id) ON DELETE CASCADE,
                     PRIMARY KEY(source_key, plateforme)
                 );
+                CREATE TABLE IF NOT EXISTS raw_history (
+                    fingerprint TEXT PRIMARY KEY,
+                    platform TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    reason TEXT,
+                    serie_id INTEGER,
+                    collected_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS raw_history_cards (
+                    fingerprint TEXT PRIMARY KEY,
+                    platform TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    collected_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
                 """)
             self._ensure_series_columns(conn)
             self._ensure_calendar_columns(conn)
             self._ensure_history_columns(conn)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS series_resolved_imdb ON series(resolved_imdb_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS raw_history_status ON raw_history(status, platform)"
+            )
 
     @staticmethod
     def _ensure_series_columns(conn: sqlite3.Connection) -> None:
@@ -121,6 +144,9 @@ class StreamingDB:
             row["name"] for row in conn.execute("PRAGMA table_info(series)").fetchall()
         }
         migrations = {
+            "resolved_imdb_id": "ALTER TABLE series ADD COLUMN resolved_imdb_id TEXT",
+            "betaseries_movie_id": "ALTER TABLE series ADD COLUMN betaseries_movie_id INTEGER",
+            "resolution_status": "ALTER TABLE series ADD COLUMN resolution_status TEXT",
             "synopsis": "ALTER TABLE series ADD COLUMN synopsis TEXT",
             "poster_url": "ALTER TABLE series ADD COLUMN poster_url TEXT",
             "banner_url": "ALTER TABLE series ADD COLUMN banner_url TEXT",
@@ -435,9 +461,53 @@ class StreamingDB:
                 ),
             )
 
-    def insert_history_item(self, item: dict[str, Any]) -> None:
-        serie_id = None
-        if item.get("series_source_key"):
+    def stage_history_item(self, item: dict[str, Any]) -> bool:
+        payload = json.dumps(item, sort_keys=True, ensure_ascii=False)
+        fingerprint = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        with self.connect() as conn:
+            cursor = conn.execute(
+                "INSERT OR IGNORE INTO raw_history(fingerprint, platform, payload) VALUES (?, ?, ?)",
+                (fingerprint, item["platform"], payload),
+            )
+            return cursor.rowcount > 0
+
+    def record_history_cards(self, platform: str, cards: list[str]) -> None:
+        with self.connect() as conn:
+            for card in cards:
+                fingerprint = hashlib.sha256(
+                    (platform + card).encode("utf-8")
+                ).hexdigest()
+                conn.execute(
+                    "INSERT OR IGNORE INTO raw_history_cards(fingerprint, platform, payload) VALUES (?, ?, ?)",
+                    (fingerprint, platform, card),
+                )
+
+    def known_history_cards(self, platform: str, cards: list[str]) -> set[str]:
+        if not cards:
+            return set()
+        fingerprints = {
+            hashlib.sha256((platform + card).encode("utf-8")).hexdigest(): card
+            for card in cards
+        }
+        known: set[str] = set()
+        items = list(fingerprints.items())
+        with self.connect() as conn:
+            for start in range(0, len(items), 500):
+                batch = items[start : start + 500]
+                placeholders = ",".join("?" for _ in batch)
+                rows = conn.execute(
+                    f"SELECT fingerprint FROM raw_history_cards WHERE platform=? AND fingerprint IN ({placeholders})",
+                    [platform, *[fingerprint for fingerprint, _card in batch]],
+                ).fetchall()
+                for row in rows:
+                    known.add(fingerprints[row["fingerprint"]])
+        return known
+
+    def insert_history_item(self, item: dict[str, Any]) -> bool:
+        if self.stage_history:
+            return self.stage_history_item(item)
+        serie_id = item.get("serie_id")
+        if serie_id is None and item.get("series_source_key"):
             with self.connect() as conn:
                 source = conn.execute(
                     "SELECT serie_id FROM series_sources WHERE source_key=? AND plateforme=?",
@@ -511,8 +581,8 @@ class StreamingDB:
                         existing["id"],
                     ),
                 )
-                return
-            conn.execute(
+                return False
+            cursor = conn.execute(
                 """
                 INSERT INTO history (
                     serie_id, saison, episode, date_vu, plateforme_source,
@@ -541,6 +611,7 @@ class StreamingDB:
                     item.get("status"),
                 ),
             )
+            return cursor.rowcount > 0
 
     def update_history_sync(
         self,
@@ -705,6 +776,63 @@ class StreamingDB:
         if source_id == target_id:
             return
         with self.connect() as conn:
+            # Match events with nullable fields too, preserving rewatches on other dates.
+            duplicates = conn.execute(
+                """SELECT source.id AS source_id, target.id AS target_id FROM history source
+                   JOIN history target ON target.serie_id=? AND source.serie_id=?
+                   AND target.date_vu IS source.date_vu AND target.plateforme_source=source.plateforme_source
+                   AND ((source.episode_url IS NOT NULL AND target.episode_url=source.episode_url)
+                     OR (target.saison IS source.saison AND target.episode IS source.episode
+                       AND (source.episode IS NOT NULL OR target.raw_title IS source.raw_title)))""",
+                (target_id, source_id),
+            ).fetchall()
+            for pair in duplicates:
+                for field in (
+                    "episode_url",
+                    "episode_title",
+                    "raw_title",
+                    "progress_percent",
+                    "status",
+                    "betaseries_episode_id",
+                    "betaseries_synced_at",
+                    "sync_status",
+                ):
+                    conn.execute(
+                        f"UPDATE history SET {field}=COALESCE({field}, (SELECT {field} FROM history WHERE id=?)) WHERE id=?",
+                        (pair["source_id"], pair["target_id"]),
+                    )
+                conn.execute("DELETE FROM history WHERE id=?", (pair["source_id"],))
+            calendar_duplicates = conn.execute(
+                """SELECT source.id AS source_id, target.id AS target_id FROM calendar source
+                   JOIN calendar target ON target.serie_id=? AND source.serie_id=?
+                   AND target.saison=source.saison AND target.episode=source.episode
+                   AND target.date_diffusion IS source.date_diffusion""",
+                (target_id, source_id),
+            ).fetchall()
+            for pair in calendar_duplicates:
+                for field in (
+                    "titre_episode",
+                    "synopsis",
+                    "image_url",
+                    "episode_url",
+                    "plateforme",
+                ):
+                    conn.execute(
+                        f"UPDATE calendar SET {field}=COALESCE({field}, (SELECT {field} FROM calendar WHERE id=?)) WHERE id=?",
+                        (pair["source_id"], pair["target_id"]),
+                    )
+                conn.execute("DELETE FROM calendar WHERE id=?", (pair["source_id"],))
+            conn.execute(
+                "UPDATE raw_history SET serie_id=? WHERE serie_id=?",
+                (target_id, source_id),
+            )
+            conn.execute(
+                """UPDATE series SET resolved_imdb_id=COALESCE(resolved_imdb_id,
+                   (SELECT resolved_imdb_id FROM series WHERE id=?)),
+                   betaseries_movie_id=COALESCE(betaseries_movie_id,
+                   (SELECT betaseries_movie_id FROM series WHERE id=?)) WHERE id=?""",
+                (source_id, source_id, target_id),
+            )
             conn.execute(
                 """INSERT OR IGNORE INTO series_aliases(titre, plateforme, serie_id)
                    SELECT titre, plateforme, ? FROM series WHERE id=? AND plateforme IS NOT NULL""",
@@ -793,6 +921,7 @@ class StreamingDB:
                     "SELECT COUNT(*) FROM calendar WHERE serie_id = ?", (series_id,)
                 ).fetchone()[0],
             }
+            conn.execute("DELETE FROM raw_history WHERE serie_id=?", (series_id,))
             conn.execute("DELETE FROM history WHERE serie_id = ?", (series_id,))
             conn.execute("DELETE FROM calendar WHERE serie_id = ?", (series_id,))
             conn.execute("DELETE FROM series_aliases WHERE serie_id = ?", (series_id,))

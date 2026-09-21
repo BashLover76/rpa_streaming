@@ -1,5 +1,217 @@
 # rpa_streaming
 
+## Ingestion unifiee : films et series
+
+Le flux par defaut collecte les films et les series ensemble. `--content-type`
+est conserve pour compatibilite, mais ne force plus le type d'une oeuvre.
+L'historique brut est conserve avant identification ; une erreur de service ou
+un titre ambigu n'efface pas les observations collectees.
+
+```mermaid
+flowchart TD
+    A[Chrome CDP / API Crunchyroll] --> B[Cartes sources : raw_history_cards]
+    A --> C[Observations : raw_history]
+    B --> C
+    C --> D[Nettoyage titre et indices episodes / plateforme]
+    D --> E[Candidats IMDb et BetaSeries]
+    E --> F{Identite non ambigue ?}
+    F -- Non --> G[Statut unresolved / error et rapport]
+    F -- Oui --> H[Type IMDb : film ou serie]
+    H --> I[Fiche BetaSeries detaillee et affiche IMDb]
+    I --> J[Fusion par identifiant IMDb verifie]
+    J --> K[Catalogue, historique local et application web]
+    G --> D
+```
+
+### Lancement depuis WSL
+
+Chrome Windows doit etre accessible via son port CDP et connecte aux profils
+souhaites. Les identifiants BetaSeries restent dans `.env`. Ollama reste utile
+pour les cartes non structurees et la reparation de selecteurs ; les cartes
+lisibles sont extraites directement du DOM.
+
+```bash
+# Depuis WSL : relancer Chrome Windows en mode CDP si l'attachement Playwright bloque
+powershell.exe -NoProfile -Command "Start-Process chrome.exe '--remote-debugging-port=9222 --remote-allow-origins=* --user-data-dir=$env:LOCALAPPDATA\Google\Chrome\User Data'"
+
+# Verification rapide du port CDP
+curl http://127.0.0.1:9222/json/version
+
+# Toutes les plateformes configurees, tous les types de contenus
+python main_ingestion.py --cdp-url http://127.0.0.1:9222 --cdp-timeout-ms 30000
+
+# Mode full : parcours complet selon les limites de chaque plateforme
+python main_ingestion.py --cdp-url http://127.0.0.1:9222 --rpa-mode full
+
+# Mode differentiel : collecte uniquement les cartes nouvelles et s'arrete
+# apres 20 cartes deja connues consecutives
+python main_ingestion.py --cdp-url http://127.0.0.1:9222 --rpa-mode differential
+
+# Premiere reprise du catalogue existant : reidentification et dedoublonnage
+python main_ingestion.py --cdp-url http://127.0.0.1:9222 --cdp-timeout-ms 30000 --reconcile-existing --retry-unresolved
+
+# Reprendre uniquement les donnees locales, sans ouvrir les plateformes
+python main_ingestion.py --skip-rpa --skip-crunchyroll-api --reconcile-existing --retry-unresolved
+
+# Collecter maintenant, identifier plus tard
+python main_ingestion.py --cdp-url http://127.0.0.1:9222 --cdp-timeout-ms 30000 --skip-resolution --skip-betaseries
+
+# Diagnostic en lecture seule d'un titre, sans modifier sa fiche
+python -m tools.enrich_imdb_metadata --inspect-title "Alien: Romulus" --platform disney_plus
+
+# Rapport des titres ambigus et des erreurs (aucun appel reseau)
+python -m tools.enrich_imdb_metadata --report
+```
+
+`--platform prime_video` limite le traitement a une plateforme. Les anciennes
+fiches jamais verifiees sont reprises automatiquement, avec sauvegarde SQLite
+coherente dans `backups/`. `--reconcile-existing` permet de toutes les reverifier.
+`--retry-unresolved` reprend les observations ambigues ou en erreur.
+Les sauvegardes contiennent l'historique personnel : les garder localement.
+Si Chrome repond sur `/json/version` mais que Playwright reste bloque sur le
+WebSocket CDP, l'ingestion RPA est ignoree apres `--cdp-timeout-ms` et la phase
+de reconciliation/enrichissement continue sur les donnees deja collectees.
+Un verrou fichier `.continue/ingestion.lock` empeche deux ingestions concurrentes.
+Il peut etre desactive ponctuellement avec `--no-lock`.
+
+### Full et differentiel
+
+Le RPA accepte deux modes :
+
+- `--rpa-mode full` : comportement complet, chaque plateforme defile jusqu'a la
+  fin visible ou jusqu'a `max_scroll_steps`.
+- `--rpa-mode differential` : collecte uniquement les cartes non encore connues,
+  puis s'arrete apres `--rpa-differential-known-threshold` cartes deja presentes
+  dans `raw_history_cards` consecutives. Le seuil par defaut est `20`.
+
+Planning conseille :
+
+- full quotidien a 04:00.
+- differentiel a 00:00, 08:00, 12:00, 16:00 et 20:00. Le full de 04:00 remplace
+  le differentiel de ce creneau. Le differentiel planifie ne passe pas
+  `--retry-unresolved` pour eviter de retraiter les anciens cas ambigus toutes
+  les 4 heures ; le full quotidien s'en charge.
+
+Installation systemd utilisateur :
+
+```bash
+python -m tools.install_ingestion_timers
+systemctl --user list-timers 'rpa-streaming-*'
+```
+
+Si systemd n'est pas actif dans WSL, utiliser cron :
+
+```bash
+crontab ops/cron/rpa_streaming.crontab
+crontab -l
+```
+
+### Identification et qualite des donnees
+
+- Les dates de lecture sont celles exposees par la plateforme. Une date absente
+  reste inconnue ; la date d'import ne devient pas une date de visionnage.
+- Les dates et libelles Netflix parasites, suffixes de saison et repetitions
+  de titres sont retires de la recherche sans modifier les observations brutes.
+- IMDb fournit le type et l'identifiant. Les suggestions web IMDb sont un
+  service non documente, distinct de l'API commerciale IMDb, et peuvent changer.
+  Elles fournissent principalement titre, type, annee et affiche : notes,
+  synopsis et langues ne sont pas garantis par ce service.
+- BetaSeries est interroge pour les films ET les series. Le titre localise,
+  l'identifiant IMDb commun, l'annee disponible et les plateformes SVOD servent
+  a departager les candidats. La plateforme est un indice : les catalogues
+  changent et un titre peut etre disponible sur plusieurs services.
+- Une correspondance avec une autre annee ou plusieurs homonymes equivalents
+  reste `unresolved`. Un premier resultat de recherche n'est jamais une preuve.
+- Les details BetaSeries (synopsis, affiche, fond, genres, saisons, episodes,
+  statut, annee, duree selon le type) enrichissent la fiche associee au meme IMDb.
+- Les films utilisent `betaseries_movie_id`, les series `betaseries_id` : leurs
+  identifiants numeriques peuvent se recouper sans designer la meme oeuvre.
+- Seules deux fiches ayant le meme `resolved_imdb_id` verifie sont fusionnees
+  par ce flux. Les alias, sources, liens, calendriers et lectures sont rattaches
+  a l'identifiant local conserve. Les dates et plateformes distinctes restent
+  des lectures distinctes. Le retraitement du meme evenement est idempotent.
+- Ce flux enrichit la base locale. Il ne marque pas automatiquement des contenus
+  comme vus sur le compte BetaSeries ; les outils de restitution d'historique
+  restent des commandes distinctes.
+
+### Etendue de la collecte
+
+Netflix et Prime Video parcourent le chargement supplementaire et le defilement.
+Prime Video garde sa limite de 300 et Crunchyroll de 500. Atteindre la limite
+produit un avertissement de collecte partielle. Les cartes deja vues sont
+conservees pendant le parcours pour les listes virtualisees.
+
+Disney+ et CANAL+ exposent ici leurs rails de reprise : le collecteur recupere
+toutes les cartes accessibles, mais ces rails ne contiennent pas l'historique
+complet des lectures terminees. Les recommandations ne sont pas importees.
+Apple TV+, Max, Paramount+ et OCS suivent la session CANAL+ configuree.
+Un historique exhaustif de ces comptes exige une source/export d'historique
+supplementaire de la plateforme. Le journal indique explicitement cette limite.
+
+Les tests du nouveau flux sont disponibles via :
+
+```bash
+python -m unittest discover -s tests
+```
+
+### Logs
+
+Chaque script configure un log console et un log fichier. Les fichiers tournent
+chaque jour a minuit et gardent 30 jours d'archives.
+
+- `logs/ingestion.log` : orchestration `main_ingestion.py`.
+- `logs/enrichment.log` : enrichissements IMDb/BetaSeries.
+- `logs/sync.log` : synchronisation de l'historique local vers BetaSeries.
+- `logs/diagnostics.log` : outils de diagnostic.
+- `logs/rpa-delete.log` : suppression RPA d'un historique plateforme.
+- `logs/platforms/<plateforme>.log` : logs dedies a une plateforme, par exemple
+  `logs/platforms/netflix.log` ou `logs/platforms/prime_video.log`.
+
+Quand l'ingestion traite toutes les plateformes, chaque bloc RPA ajoute aussi
+ses lignes dans le fichier de la plateforme concernee.
+
+### Grafana / Loki
+
+Le dossier `observability/` fournit un connecteur local Grafana via Loki et
+Promtail. Promtail lit directement les fichiers `logs/*.log` et
+`logs/platforms/*.log`, puis ajoute les labels `script`, `platform`, `level`,
+`logger` et `source`.
+
+Lancement :
+
+```bash
+cd observability
+docker compose up -d
+```
+
+Acces :
+
+- Grafana : `http://localhost:3000`
+- Identifiant par defaut : `admin`
+- Mot de passe par defaut : `admin`
+- Datasource provisionnee : `Loki`
+- Dashboard provisionne : `RPA Streaming Logs`
+
+Requetes Loki utiles :
+
+```logql
+{job="rpa_streaming"}
+{job="rpa_streaming", source="platform", platform="netflix"}
+{job="rpa_streaming", source="script", script="ingestion"}
+{job="rpa_streaming"} | level =~ "ERROR|WARNING"
+```
+
+Arret :
+
+```bash
+cd observability
+docker compose down
+```
+
+Documentation des services : [details series BetaSeries](https://developers.betaseries.com/docs/api/get-shows-display/),
+[details films BetaSeries](https://developers.betaseries.com/docs/api/get-movies-movie/),
+[API officielle IMDb](https://data.imdb.com/documentation/api-documentation/sample-queries/search/).
+
 Projet personnel d'ingestion locale pour centraliser le calendrier BetaSeries, les séries suivies et les historiques de visionnage issus des plateformes de streaming disponibles en France.
 
 Le projet combine trois approches:
