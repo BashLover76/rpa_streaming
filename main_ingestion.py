@@ -1,16 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import contextlib
-import fcntl
-import json
 import logging
-import subprocess
 import time
 from pathlib import Path
-from typing import Iterator
-from urllib.parse import urljoin
-from urllib.request import Request, urlopen
 
 import httpx
 
@@ -20,6 +13,12 @@ from ingestion.db import StreamingDB
 from ingestion.logging_config import configure_logging
 from ingestion.ollama_client import OllamaClient
 from ingestion.rpa_self_healing import SelfHealingRPA, load_platform_configs
+from ingestion.runtime_platform import (
+    chrome_cdp_ready,
+    portable_file_lock,
+    start_chrome_cdp,
+    wait_for_chrome_cdp,
+)
 from ingestion.settings import Settings
 from ingestion.catalog_pipeline import CatalogPipeline
 from ingestion.title_resolution import IMDbClient, TitleResolver
@@ -111,7 +110,7 @@ def build_betaseries_client(settings: Settings, db: StreamingDB) -> BetaSeriesCl
 def main() -> None:
     args = parse_args()
     configure_logging("ingestion", platform=args.platform)
-    with _ingestion_lock(args.lock_file, disabled=args.no_lock):
+    with portable_file_lock(args.lock_file, disabled=args.no_lock):
         run(args)
 
 
@@ -211,67 +210,22 @@ def run(args: argparse.Namespace) -> None:
 
 
 def ensure_chrome_cdp(cdp_url: str, *, timeout_ms: int) -> None:
-    """Start Windows Chrome for Playwright CDP when the endpoint is down."""
+    """Start Chrome for Playwright CDP when the endpoint is down."""
     logger = logging.getLogger(__name__)
-    if _chrome_cdp_ready(cdp_url):
+    if chrome_cdp_ready(cdp_url):
         return
 
     logger.warning("Chrome CDP is not reachable at %s; starting Chrome.", cdp_url)
-    command = (
-        "Start-Process chrome.exe "
-        "'--remote-debugging-port=9222 --remote-allow-origins=\\* "
-        "--user-data-dir=$env:LOCALAPPDATA\\Google\\Chrome\\User Data'"
-    )
     try:
-        subprocess.run(
-            ["powershell.exe", "-NoProfile", "-Command", command],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    except (OSError, subprocess.CalledProcessError) as exc:
-        logger.warning("Unable to auto-start Windows Chrome for CDP: %s", exc)
+        start_chrome_cdp(cdp_url)
+    except (OSError, RuntimeError) as exc:
+        logger.warning("Unable to auto-start Chrome for CDP: %s", exc)
         return
 
-    deadline = time.monotonic() + max(5.0, timeout_ms / 1000.0)
-    while time.monotonic() < deadline:
-        if _chrome_cdp_ready(cdp_url):
-            logger.info("Chrome CDP is ready: %s", cdp_url)
-            return
-        time.sleep(0.5)
+    if wait_for_chrome_cdp(cdp_url, timeout_ms=timeout_ms):
+        logger.info("Chrome CDP is ready: %s", cdp_url)
+        return
     logger.warning("Chrome was started but CDP did not answer before timeout: %s", cdp_url)
-
-
-def _chrome_cdp_ready(cdp_url: str) -> bool:
-    version_url = urljoin(cdp_url.rstrip("/") + "/", "json/version")
-    try:
-        request = Request(version_url, headers={"Accept": "application/json"})
-        with urlopen(request, timeout=2) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except Exception:
-        return False
-    return bool(payload.get("webSocketDebuggerUrl"))
-
-
-@contextlib.contextmanager
-def _ingestion_lock(path: Path, *, disabled: bool = False) -> Iterator[None]:
-    if disabled:
-        yield
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        try:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as exc:
-            raise SystemExit(
-                f"Another ingestion run is already active: {path}"
-            ) from exc
-        handle.write(f"{time.time():.0f}\n")
-        handle.flush()
-        try:
-            yield
-        finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 if __name__ == "__main__":

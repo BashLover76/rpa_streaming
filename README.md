@@ -23,16 +23,21 @@ flowchart TD
     G --> D
 ```
 
-### Lancement depuis WSL
+### Lancement multi-OS
 
-Chrome Windows doit etre accessible via son port CDP et connecte aux profils
-souhaites. Les identifiants BetaSeries restent dans `.env`. Ollama reste utile
+Chrome doit etre accessible via son port CDP et connecte aux profils
+souhaites. Sous WSL, Chrome est lance cote Windows ; sous Linux natif, Chrome ou
+Chromium est lance localement ; sous Windows natif, Chrome est lance via
+PowerShell. Les identifiants BetaSeries restent dans `.env`. Ollama reste utile
 pour les cartes non structurees et la reparation de selecteurs ; les cartes
 lisibles sont extraites directement du DOM.
 
 ```bash
 # Depuis PowerShell Windows ou WSL : lancer Chrome Windows en mode CDP
 powershell.exe -NoProfile -Command "Start-Process chrome.exe '--remote-debugging-port=9222 --remote-allow-origins=\* --user-data-dir=$env:LOCALAPPDATA\Google\Chrome\User Data'"
+
+# Depuis Linux natif si tu veux lancer Chrome manuellement
+google-chrome --remote-debugging-port=9222 --remote-allow-origins='*' --user-data-dir="$HOME/.config/rpa-streaming-chrome" >/dev/null 2>&1 &
 
 # Verification rapide du port CDP
 curl http://127.0.0.1:9222/json/version
@@ -521,6 +526,34 @@ Utilisation:
 - Chromium Playwright.
 
 ## Installation
+
+Installation automatique des composants système et Python selon l'OS détecté
+(Windows, Linux natif ou WSL) :
+
+```bash
+python tools/install_system_dependencies.py
+```
+
+Options utiles :
+
+```bash
+# Afficher les commandes sans les exécuter
+python tools/install_system_dependencies.py --dry-run
+
+# Installer aussi Ollama quand le gestionnaire système le permet
+python tools/install_system_dependencies.py --with-ollama
+```
+
+Le script installe ou prépare :
+
+- Windows : Python, Git, Google Chrome via `winget` quand disponible.
+- WSL : paquets Ubuntu/Debian requis, venv Python et dépendances projet. Chrome
+  reste lancé côté Windows via CDP.
+- Linux natif : paquets Ubuntu/Debian requis, Google Chrome stable, venv Python
+  et dépendances projet.
+- Tous les OS : `pip install -r requirements.txt` et `playwright install chromium`.
+
+Installation manuelle équivalente :
 
 ```bash
 python -m venv .venv

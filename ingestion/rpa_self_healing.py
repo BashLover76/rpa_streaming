@@ -215,7 +215,7 @@ class SelfHealingRPA:
         except Exception as exc:
             raise CDPConnectionError(
                 f"Chrome CDP is not reachable at {version_url}. "
-                "Start Windows Chrome with --remote-debugging-port=9222, then retry."
+                "Start Chrome with --remote-debugging-port=9222, then retry."
             ) from exc
         websocket_url = payload.get("webSocketDebuggerUrl")
         browser_name = payload.get("Browser", "unknown")
@@ -1281,10 +1281,10 @@ def _cdp_recovery_message(cdp_url: str | None) -> str:
     return (
         f"Playwright could not attach to Chrome CDP at {endpoint}. "
         "The DevTools endpoint answered, but the browser attach did not complete. "
-        "Close every Chrome window, then relaunch Windows Chrome with: "
-        'powershell.exe -NoProfile -Command "Start-Process chrome.exe '
-        "'--remote-debugging-port=9222 --remote-allow-origins=* "
-        "--user-data-dir=$env:LOCALAPPDATA\\Google\\Chrome\\User Data'\". "
+        "Close every Chrome window, then relaunch Chrome with remote debugging. "
+        "On WSL/Windows use: powershell.exe -NoProfile -Command "
+        "\"Start-Process chrome.exe '--remote-debugging-port=9222 "
+        "--remote-allow-origins=* --user-data-dir=$env:LOCALAPPDATA\\Google\\Chrome\\User Data'\". "
         f"Check from WSL with: curl {endpoint}/json/version"
     )
 
