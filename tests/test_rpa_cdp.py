@@ -58,7 +58,7 @@ class CDPPreflightTest(unittest.TestCase):
             with self.assertRaises(CDPConnectionError) as raised:
                 rpa._preflight_cdp_endpoint()
 
-        self.assertIn("Start Windows Chrome", str(raised.exception))
+        self.assertIn("Start Chrome", str(raised.exception))
 
     def test_selector_placeholder_from_ollama_is_rejected(self) -> None:
         self.assertFalse(_looks_like_selector("selerctor"))

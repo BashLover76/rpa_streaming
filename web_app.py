@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import calendar as month_calendar
-import fcntl
 import hmac
 import json
 import os
@@ -30,6 +29,7 @@ from flask import (
 )
 
 from ingestion.db import StreamingDB
+from ingestion.runtime_platform import portable_file_lock
 from ingestion.settings import Settings
 
 PLATFORM_LABELS = {
@@ -623,13 +623,8 @@ def enqueue_rpa_platform(platform: str) -> dict[str, Any]:
 
 @contextmanager
 def locked_admin_rpa_queue():
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    with ADMIN_RPA_QUEUE_LOCK.open("w", encoding="utf-8") as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    with portable_file_lock(ADMIN_RPA_QUEUE_LOCK):
+        yield
 
 
 def read_admin_rpa_queue() -> list[dict[str, Any]]:

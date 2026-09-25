@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import subprocess
 import sys
-from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
+
+from ingestion.runtime_platform import portable_file_lock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,11 +21,14 @@ STATUS_FILE = STATE_DIR / "admin_rpa_status.json"
 
 def main() -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    with WORKER_LOCK.open("w", encoding="utf-8") as worker_lock:
-        try:
-            fcntl.flock(worker_lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return
+    try:
+        with portable_file_lock(WORKER_LOCK):
+            run_until_queue_empty()
+    except SystemExit:
+        return
+
+
+def run_until_queue_empty() -> None:
         while True:
             job = pop_job()
             if job is None:
@@ -77,15 +80,8 @@ def pop_job() -> dict[str, Any] | None:
         return job
 
 
-@contextmanager
-def locked_queue() -> Iterator[None]:
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    with QUEUE_LOCK.open("w", encoding="utf-8") as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+def locked_queue():
+    return portable_file_lock(QUEUE_LOCK)
 
 
 def read_queue() -> list[dict[str, Any]]:
