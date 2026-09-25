@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Admin - KPIs{% endblock %}
+{% block content %}
+<section class="admin-heading">
+  <div><p class="eyebrow">Administration locale</p><h1>KPIs ingestion</h1></div>
+  <p class="muted">Vue synthétique du catalogue local et des dernières durées RPA.</p>
+</section>
+<nav class="admin-tabs">
+  <a href="{{ url_for('admin_delete_view') }}">Suppressions</a>
+  <a href="{{ url_for('admin_rpa_view') }}">Relance RPA</a>
+  <a href="{{ url_for('admin_logs_view') }}">Logs</a>
+  <a aria-current="page" href="{{ url_for('admin_kpis_view') }}">KPIs</a>
+</nav>
+
+<section class="kpi-grid">
+  <article class="kpi-card">
+    <span>Séries</span>
+    <strong>{{ kpis.series_total }}</strong>
+  </article>
+  <article class="kpi-card">
+    <span>Films</span>
+    <strong>{{ kpis.movie_total }}</strong>
+  </article>
+  <article class="kpi-card">
+    <span>Plateformes suivies</span>
+    <strong>{{ kpis.platform_count }}</strong>
+  </article>
+  <article class="kpi-card">
+    <span>Ajouts depuis dernière ingestion</span>
+    <strong>{{ kpis.added_series + kpis.added_movies }}</strong>
+    <small>{{ kpis.added_series }} séries · {{ kpis.added_movies }} films</small>
+  </article>
+</section>
+
+<section class="admin-section">
+  <h2>Plateformes suivies</h2>
+  <div class="platform-grid">
+    {% for item in kpis.platforms %}
+      <a class="platform-pill {% if selected_platform == item.platform %}is-selected{% endif %}" href="{{ url_for('admin_kpis_view', platform=item.platform) }}">
+        <span class="platform-label"><b class="platform-mark platform-{{ item.platform }}">{{ platform_labels.get(item.platform, item.platform) }}</b></span>
+        <strong>{{ item.total }}</strong>
+        <small>{{ item.series_total }} séries · {{ item.movie_total }} films</small>
+      </a>
+    {% else %}
+      <p class="empty">Aucune plateforme suivie.</p>
+    {% endfor %}
+  </div>
+</section>
+
+{% if selected_platform %}
+<section class="admin-section">
+  <h2>Derniers titres trouvés - {{ platform_labels.get(selected_platform, selected_platform) }}</h2>
+  <div class="kpi-title-list">
+  {% for title in kpis.selected_platform_titles %}
+    <a class="kpi-title-row" href="{{ url_for('series_detail', series_id=title.id) }}">
+      {% if title.poster_url %}
+        <img src="{{ title.poster_url }}" alt="" loading="lazy">
+      {% else %}
+        <span class="series-thumb placeholder"></span>
+      {% endif %}
+      <div>
+        <strong>{{ title.titre }}</strong>
+        <span>{{ title.content_type }}{% if title.is_recent %} · nouveau depuis la dernière ingestion{% endif %}</span>
+      </div>
+      <div class="row-meta">
+        {% if title.last_watched_at %}<span>Vu : {{ title.last_watched_at }}</span>{% endif %}
+        <span>{{ title.history_count }} historique{% if title.history_count > 1 %}s{% endif %}</span>
+        <span>MAJ : {{ title.updated_at }}</span>
+      </div>
+    </a>
+  {% else %}
+    <p class="empty">Aucun titre trouvé pour cette plateforme.</p>
+  {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="admin-section">
+  <h2>Ajouts depuis la dernière ingestion</h2>
+  {% if kpis.last_ingestion_started_at %}
+    <p class="muted">Dernier démarrage détecté : {{ kpis.last_ingestion_started_at }}</p>
+  {% else %}
+    <p class="muted">Aucun démarrage d’ingestion détecté dans les logs.</p>
+  {% endif %}
+</section>
+
+<section class="admin-section">
+  <h2>Temps d’ingestion par plateforme</h2>
+  <div class="kpi-chart">
+    {% for item in kpis.durations %}
+      <article class="kpi-bar-row">
+        <div>
+          <span class="platform-label"><b class="platform-mark platform-{{ item.platform }}">{{ item.label }}</b></span>
+          <small>{{ item.duration }}{% if item.inserted is not none %} · {{ item.inserted }} ajout{% if item.inserted > 1 %}s{% endif %}{% endif %}</small>
+        </div>
+        <div class="kpi-bar-track" aria-label="{{ item.label }} {{ item.duration }}">
+          <span class="kpi-bar{% if item.status == 'failed' %} is-failed{% endif %}" style="width: {{ item.percent }}%"></span>
+        </div>
+      </article>
+    {% else %}
+      <p class="empty">Aucune durée RPA détectée dans les logs.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

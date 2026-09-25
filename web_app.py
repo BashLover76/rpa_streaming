@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import calendar as month_calendar
+import fcntl
 import hmac
 import json
+import os
 import re
 import sqlite3
+import subprocess
+import sys
+import uuid
+from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -190,11 +196,44 @@ def create_app() -> Flask:
 
     @app.get("/admin")
     def admin_view():
+        return redirect(url_for("admin_delete_view"))
+
+    @app.get("/admin/delete")
+    def admin_delete_view():
         query = request.args.get("q", "").strip()
+        movie_query = request.args.get("movie_q", "").strip()
         return render_template(
-            "admin.html",
+            "admin_delete.html",
             series=fetch_admin_series(query),
+            movies=fetch_admin_movies(movie_query),
             query=query,
+            movie_query=movie_query,
+            platform_labels=PLATFORM_LABELS,
+        )
+
+    @app.get("/admin/rpa")
+    def admin_rpa_view():
+        return render_template(
+            "admin_rpa.html",
+            platforms=fetch_admin_platforms(),
+            rpa_state=fetch_admin_rpa_state(),
+            platform_labels=PLATFORM_LABELS,
+        )
+
+    @app.get("/admin/logs")
+    def admin_logs_view():
+        return render_template(
+            "admin_logs.html",
+            ingestion_logs=fetch_recent_ingestion_logs(),
+        )
+
+    @app.get("/admin/kpis")
+    def admin_kpis_view():
+        selected_platform = request.args.get("platform", "").strip()
+        return render_template(
+            "admin_kpis.html",
+            kpis=fetch_admin_kpis(selected_platform or None),
+            selected_platform=selected_platform,
             platform_labels=PLATFORM_LABELS,
         )
 
@@ -213,7 +252,34 @@ def create_app() -> Flask:
             source.backup(target)
         counts = StreamingDB(db_path).delete_series(series_id)
         return redirect(
-            url_for("admin_view", deleted=counts["series"], backup=backup.name)
+            url_for("admin_delete_view", deleted=counts["series"], backup=backup.name)
+        )
+
+    @app.post("/admin/movies/<int:movie_id>/delete")
+    def admin_delete_movie(movie_id: int):
+        if request.form.get("confirmation") != "SUPPRIMER":
+            abort(400, description="Confirmation invalide.")
+        db_path = Path(current_app.config["DB_PATH"])
+        backup = backup_database(db_path, "movie-delete")
+        counts = StreamingDB(db_path).delete_series(movie_id)
+        return redirect(
+            url_for(
+                "admin_delete_view", deleted_movie=counts["series"], backup=backup.name
+            )
+        )
+
+    @app.post("/admin/rpa/<platform>/run")
+    def admin_run_rpa(platform: str):
+        known_platforms = {item["platform"] for item in fetch_admin_platforms()}
+        if platform not in known_platforms:
+            abort(404)
+        job = enqueue_rpa_platform(platform)
+        return redirect(
+            url_for(
+                "admin_rpa_view",
+                rpa_started=platform,
+                rpa_log=Path(job["log_path"]).name,
+            )
         )
 
     @app.get("/calendar")
@@ -435,6 +501,7 @@ def fetch_admin_series(search_term: str = "") -> list[dict[str, Any]]:
     """Build the series inventory displayed by the local admin page."""
     filters: list[str] = []
     parameters: list[Any] = []
+    filters.append(VALID_SERIES_TITLE_SQL)
     if search_term:
         filters.append("s.titre LIKE ?")
         parameters.append(f"%{search_term}%")
@@ -462,6 +529,375 @@ def fetch_admin_series(search_term: str = "") -> list[dict[str, Any]]:
         .fetchall()
     )
     return [dict(row) for row in rows]
+
+
+def fetch_admin_movies(search_term: str = "") -> list[dict[str, Any]]:
+    filters = ["LOWER(COALESCE(s.imdb_kind, '')) IN ('movie', 'film')"]
+    parameters: list[Any] = []
+    if search_term:
+        filters.append("s.titre LIKE ?")
+        parameters.append(f"%{search_term}%")
+    rows = (
+        get_db()
+        .execute(
+            f"""
+        SELECT
+            s.id,
+            s.titre,
+            COALESCE(s.plateforme, 'unknown') AS platform,
+            COUNT(DISTINCT h.id) AS history_count,
+            MAX(h.date_vu) AS last_watched_at
+        FROM series AS s
+        LEFT JOIN history AS h ON h.serie_id = s.id
+        WHERE {' AND '.join(filters)}
+        GROUP BY s.id
+        ORDER BY s.titre COLLATE NOCASE
+        LIMIT 50
+        """,
+            parameters,
+        )
+        .fetchall()
+    )
+    return [dict(row) for row in rows]
+
+
+def fetch_admin_platforms() -> list[dict[str, str]]:
+    config_dir = Path("config/platforms")
+    platforms = []
+    if config_dir.exists():
+        for path in sorted(config_dir.glob("*.json")):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                continue
+            name = payload.get("name") or path.stem
+            platforms.append(
+                {"platform": name, "label": PLATFORM_LABELS.get(name, name)}
+            )
+    return platforms
+
+
+def backup_database(db_path: Path, reason: str) -> Path:
+    backup = (
+        db_path.parent
+        / "backups"
+        / f"streaming-before-{reason}-{datetime.now():%Y%m%d-%H%M%S}.db"
+    )
+    backup.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(db_path) as source, sqlite3.connect(backup) as target:
+        source.backup(target)
+    return backup
+
+
+STATE_DIR = Path(".continue")
+ADMIN_RPA_QUEUE = STATE_DIR / "admin_rpa_queue.json"
+ADMIN_RPA_QUEUE_LOCK = STATE_DIR / "admin_rpa_queue.lock"
+ADMIN_RPA_STATUS = STATE_DIR / "admin_rpa_status.json"
+
+
+def enqueue_rpa_platform(platform: str) -> dict[str, Any]:
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    job = {
+        "id": uuid.uuid4().hex,
+        "platform": platform,
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "log_path": str(Path("logs") / f"admin-rpa-{platform}-{timestamp}.log"),
+    }
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    Path(job["log_path"]).parent.mkdir(parents=True, exist_ok=True)
+    with locked_admin_rpa_queue():
+        queue = read_admin_rpa_queue()
+        queue.append(job)
+        ADMIN_RPA_QUEUE.write_text(
+            json.dumps(queue, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    subprocess.Popen(
+        [sys.executable, "-m", "tools.admin_rpa_worker"],
+        cwd=Path(__file__).resolve().parent,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    return job
+
+
+@contextmanager
+def locked_admin_rpa_queue():
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    with ADMIN_RPA_QUEUE_LOCK.open("w", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def read_admin_rpa_queue() -> list[dict[str, Any]]:
+    if not ADMIN_RPA_QUEUE.exists():
+        return []
+    try:
+        value = json.loads(ADMIN_RPA_QUEUE.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    return value if isinstance(value, list) else []
+
+
+def fetch_admin_rpa_state() -> dict[str, Any]:
+    status: dict[str, Any] = {"current": None}
+    if ADMIN_RPA_STATUS.exists():
+        try:
+            loaded = json.loads(ADMIN_RPA_STATUS.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                status.update(loaded)
+        except json.JSONDecodeError:
+            pass
+    with locked_admin_rpa_queue():
+        queue = read_admin_rpa_queue()
+    current = status.get("current")
+    return {
+        "current": enrich_rpa_job(current) if isinstance(current, dict) else None,
+        "queue": [enrich_rpa_job(job) for job in queue],
+        "recent_logs": fetch_admin_rpa_logs(),
+    }
+
+
+def enrich_rpa_job(job: dict[str, Any]) -> dict[str, Any]:
+    item = dict(job)
+    item["label"] = PLATFORM_LABELS.get(item.get("platform"), item.get("platform"))
+    item["log_name"] = Path(item.get("log_path", "")).name
+    item["log_tail"] = tail_file(Path(item.get("log_path", "")), lines=80)
+    return item
+
+
+def fetch_admin_rpa_logs(limit: int = 3) -> list[dict[str, Any]]:
+    paths = sorted(
+        Path("logs").glob("admin-rpa-*.log"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )[:limit]
+    return [
+        {
+            "name": path.name,
+            "updated_at": datetime.fromtimestamp(path.stat().st_mtime).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+            "content": tail_file(path, lines=80),
+        }
+        for path in paths
+    ]
+
+
+def tail_file(path: Path, *, lines: int) -> str:
+    if not path.exists():
+        return ""
+    try:
+        return "\n".join(
+            path.read_text(encoding="utf-8", errors="replace").splitlines()[-lines:]
+        )
+    except OSError:
+        return ""
+
+
+def fetch_recent_ingestion_logs(limit: int = 2, tail_lines: int = 80) -> list[dict[str, Any]]:
+    log_dir = Path("logs")
+    if not log_dir.exists():
+        return []
+    paths = sorted(
+        log_dir.glob("ingestion.log*"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )[:limit]
+    logs = []
+    for path in paths:
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        logs.append(
+            {
+                "name": path.name,
+                "updated_at": datetime.fromtimestamp(path.stat().st_mtime).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
+                "content": "\n".join(lines[-tail_lines:]),
+            }
+        )
+    return logs
+
+
+def fetch_admin_kpis(selected_platform: str | None = None) -> dict[str, Any]:
+    conn = get_db()
+    series_total = conn.execute(
+        f"SELECT COUNT(*) FROM series AS s WHERE {VALID_SERIES_TITLE_SQL}"
+    ).fetchone()[0]
+    movie_total = conn.execute(
+        "SELECT COUNT(*) FROM series WHERE LOWER(COALESCE(imdb_kind, '')) IN ('movie', 'film')"
+    ).fetchone()[0]
+    platforms = [
+        dict(row)
+        for row in conn.execute(
+            """
+        SELECT
+            COALESCE(plateforme, 'unknown') AS platform,
+            COUNT(*) AS total,
+            COUNT(CASE WHEN LOWER(COALESCE(imdb_kind, '')) IN ('movie', 'film') THEN 1 END) AS movie_total,
+            COUNT(CASE WHEN COALESCE(LOWER(imdb_kind), '') NOT IN ('movie', 'film') THEN 1 END) AS series_total
+        FROM series
+        GROUP BY COALESCE(plateforme, 'unknown')
+        ORDER BY total DESC, platform
+        """
+        )
+    ]
+    last_start = latest_ingestion_start()
+    added_series = added_movies = 0
+    if last_start:
+        added_series = conn.execute(
+            f"""SELECT COUNT(*) FROM series AS s
+                WHERE {VALID_SERIES_TITLE_SQL} AND datetime(updated_at) >= datetime(?)""",
+            (last_start.strftime("%Y-%m-%d %H:%M:%S"),),
+        ).fetchone()[0]
+        added_movies = conn.execute(
+            """SELECT COUNT(*) FROM series
+               WHERE LOWER(COALESCE(imdb_kind, '')) IN ('movie', 'film')
+                 AND datetime(updated_at) >= datetime(?)""",
+            (last_start.strftime("%Y-%m-%d %H:%M:%S"),),
+        ).fetchone()[0]
+    durations = ingestion_durations_by_platform()
+    max_seconds = max([item["seconds"] for item in durations] or [1])
+    for item in durations:
+        item["percent"] = round((item["seconds"] / max_seconds) * 100, 1)
+    return {
+        "series_total": series_total,
+        "movie_total": movie_total,
+        "platform_count": len(platforms),
+        "platforms": platforms,
+        "added_series": added_series,
+        "added_movies": added_movies,
+        "last_ingestion_started_at": (
+            last_start.strftime("%Y-%m-%d %H:%M:%S") if last_start else None
+        ),
+        "durations": durations,
+        "selected_platform": selected_platform,
+        "selected_platform_titles": fetch_recent_titles_for_platform(
+            selected_platform, last_start
+        )
+        if selected_platform
+        else [],
+    }
+
+
+def fetch_recent_titles_for_platform(
+    platform: str | None, last_start: datetime | None, limit: int = 25
+) -> list[dict[str, Any]]:
+    if not platform:
+        return []
+    rows = (
+        get_db()
+        .execute(
+            """
+        SELECT
+            s.id,
+            s.titre,
+            COALESCE(s.plateforme, 'unknown') AS platform,
+            s.imdb_kind,
+            s.updated_at,
+            s.poster_url,
+            MAX(h.date_vu) AS last_watched_at,
+            COUNT(DISTINCT h.id) AS history_count
+        FROM series AS s
+        LEFT JOIN history AS h ON h.serie_id = s.id
+        WHERE COALESCE(s.plateforme, 'unknown') = ?
+        GROUP BY s.id
+        ORDER BY datetime(s.updated_at) DESC, s.id DESC
+        LIMIT ?
+        """,
+            (platform, limit),
+        )
+        .fetchall()
+    )
+    threshold = last_start.strftime("%Y-%m-%d %H:%M:%S") if last_start else None
+    titles = []
+    for row in rows:
+        item = dict(row)
+        item["content_type"] = (
+            "film"
+            if str(item.get("imdb_kind") or "").casefold() in {"movie", "film"}
+            else "série"
+        )
+        item["is_recent"] = bool(
+            threshold and item.get("updated_at") and item["updated_at"] >= threshold
+        )
+        titles.append(item)
+    return titles
+
+
+def latest_ingestion_start() -> datetime | None:
+    starts = [
+        timestamp
+        for timestamp, line in iter_ingestion_log_lines()
+        if "Connecting to Chrome over CDP" in line
+        or "Crunchyroll API skipped" in line
+        or "Starting RPA platform sync" in line
+    ]
+    return max(starts) if starts else None
+
+
+def ingestion_durations_by_platform() -> list[dict[str, Any]]:
+    starts: dict[str, datetime] = {}
+    latest: dict[str, dict[str, Any]] = {}
+    for timestamp, line in iter_ingestion_log_lines():
+        start = re.search(r"Starting RPA platform sync: ([a-z0-9_]+)", line)
+        if start:
+            starts[start.group(1)] = timestamp
+            continue
+        end = re.search(r"RPA platform synced: ([a-z0-9_]+), inserted=(\d+)", line)
+        failed = re.search(r"RPA platform sync failed: ([a-z0-9_]+)", line)
+        platform = end.group(1) if end else failed.group(1) if failed else None
+        if not platform or platform not in starts:
+            continue
+        seconds = max(0.0, (timestamp - starts[platform]).total_seconds())
+        latest[platform] = {
+            "platform": platform,
+            "label": PLATFORM_LABELS.get(platform, platform),
+            "seconds": round(seconds, 1),
+            "duration": format_duration(seconds),
+            "status": "failed" if failed else "ok",
+            "inserted": int(end.group(2)) if end else None,
+        }
+    return sorted(latest.values(), key=lambda item: item["seconds"], reverse=True)
+
+
+def iter_ingestion_log_lines() -> list[tuple[datetime, str]]:
+    log_dir = Path("logs")
+    if not log_dir.exists():
+        return []
+    items: list[tuple[datetime, str]] = []
+    for path in sorted(log_dir.glob("ingestion.log*")):
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            timestamp = parse_log_timestamp(line)
+            if timestamp:
+                items.append((timestamp, line))
+    return sorted(items, key=lambda item: item[0])
+
+
+def parse_log_timestamp(line: str) -> datetime | None:
+    match = re.match(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),(\d{3})", line)
+    if not match:
+        return None
+    return datetime.strptime(
+        f"{match.group(1)}.{match.group(2)}", "%Y-%m-%d %H:%M:%S.%f"
+    )
+
+
+def format_duration(seconds: float) -> str:
+    minutes, remaining = divmod(int(round(seconds)), 60)
+    if minutes:
+        return f"{minutes} min {remaining:02d} s"
+    return f"{remaining} s"
 
 
 def fetch_stats() -> dict[str, int]:
