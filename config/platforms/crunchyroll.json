@@ -13,6 +13,7 @@
   },
   "rpa": {
     "start_url": "https://www.crunchyroll.com/fr/history",
+    "login_url": "https://www.crunchyroll.com/fr/login",
     "wait_after_login_seconds": 12,
     "requires_browser_extension": false,
     "strict_history_scope": true,
@@ -23,6 +24,10 @@
       "history_container": ".history-body",
       "history_rows": ".history-body [class^='history-playable-card--']",
       "cookie_accept": "button:has-text('Accepter'), button:has-text('Accept')",
+      "logged_in_indicator": ".history-body, a[href*='/history']",
+      "login_email": "input[type='email'], input[name='email'], input[name='login']",
+      "login_password": "input[type='password'], input[name='password']",
+      "login_submit": "button[type='submit'], button:has-text('Se connecter'), button:has-text('Connexion'), button:has-text('Log In')",
       "show_more": "button:has-text('Voir plus'), button:has-text('More')"
     }
   }

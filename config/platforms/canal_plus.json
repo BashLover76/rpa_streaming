@@ -9,6 +9,7 @@
   },
   "rpa": {
     "start_url": "https://www.canalplus.com/",
+    "login_url": "https://www.canalplus.com/connexion",
     "wait_after_login_seconds": 18,
     "requires_browser_extension": true,
     "strict_history_scope": true,
@@ -20,6 +21,10 @@
       "history_container": "main, [role='main'], body",
       "history_rows": "a[title][href*='/'], article a[title][href], li a[title][href], [data-testid*='card'] a[title][href]",
       "cookie_accept": "button:has-text('Accepter'), button:has-text('Continuer sans accepter')",
+      "logged_in_indicator": "a:has-text('Mes vidéos'), a:has-text('Mes videos'), a[href*='mes-videos']",
+      "login_email": "input[type='email'], input[name='email'], input[name='login']",
+      "login_password": "input[type='password'], input[name='password']",
+      "login_submit": "button[type='submit'], button:has-text('Continuer'), button:has-text('Se connecter'), button:has-text('Connexion')",
       "show_more": "button:has-text('Voir plus'), button:has-text('Plus')"
     }
   }

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 import time
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from ingestion.runtime_platform import (
     chrome_cdp_ready,
     portable_file_lock,
     start_chrome_cdp,
+    terminate_chrome_processes,
     wait_for_chrome_cdp,
 )
 from ingestion.settings import Settings
@@ -82,6 +84,11 @@ def parse_args() -> argparse.Namespace:
         "--no-auto-start-chrome",
         action="store_true",
         help="Do not start Windows Chrome automatically when the CDP endpoint is unreachable.",
+    )
+    parser.add_argument(
+        "--force-restart-chrome",
+        action="store_true",
+        help="If Chrome CDP stays unreachable, close Chrome and relaunch it with CDP and the local extension without asking.",
     )
     parser.add_argument("--pause-seconds", type=float, default=2.0)
     parser.add_argument("--betaseries-days-before", type=int, default=30)
@@ -172,7 +179,12 @@ def run(args: argparse.Namespace) -> None:
         cdp_url = args.cdp_url or settings.rpa_cdp_url or None
         cdp_timeout_ms = args.cdp_timeout_ms or settings.rpa_cdp_timeout_ms
         if cdp_url and not args.no_auto_start_chrome:
-            ensure_chrome_cdp(cdp_url, timeout_ms=cdp_timeout_ms)
+            ensure_chrome_cdp(
+                cdp_url,
+                timeout_ms=cdp_timeout_ms,
+                extension_path=settings.rpa_browser_extension_path,
+                force_restart=args.force_restart_chrome,
+            )
         rpa = SelfHealingRPA(
             db=collector_db,
             ollama=ollama,
@@ -183,6 +195,7 @@ def run(args: argparse.Namespace) -> None:
             cdp_timeout_ms=cdp_timeout_ms,
             rpa_mode=args.rpa_mode,
             differential_known_threshold=args.rpa_differential_known_threshold,
+            credentials=settings.rpa_credentials,
         )
         rpa.run_platforms(platform_configs)
 
@@ -209,23 +222,71 @@ def run(args: argparse.Namespace) -> None:
             )
 
 
-def ensure_chrome_cdp(cdp_url: str, *, timeout_ms: int) -> None:
+def ensure_chrome_cdp(
+    cdp_url: str,
+    *,
+    timeout_ms: int,
+    extension_path: Path | None = None,
+    force_restart: bool = False,
+) -> None:
     """Start Chrome for Playwright CDP when the endpoint is down."""
     logger = logging.getLogger(__name__)
     if chrome_cdp_ready(cdp_url):
         return
 
     logger.warning("Chrome CDP is not reachable at %s; starting Chrome.", cdp_url)
-    try:
-        start_chrome_cdp(cdp_url)
-    except (OSError, RuntimeError) as exc:
-        logger.warning("Unable to auto-start Chrome for CDP: %s", exc)
-        return
-
-    if wait_for_chrome_cdp(cdp_url, timeout_ms=timeout_ms):
+    if _start_and_wait_for_chrome(
+        cdp_url, timeout_ms=timeout_ms, extension_path=extension_path
+    ):
         logger.info("Chrome CDP is ready: %s", cdp_url)
         return
-    logger.warning("Chrome was started but CDP did not answer before timeout: %s", cdp_url)
+
+    logger.warning(
+        "Chrome was started but CDP did not answer before timeout: %s", cdp_url
+    )
+    if not _should_restart_chrome(force_restart=force_restart):
+        logger.warning(
+            "Chrome restart skipped. Close Chrome manually or rerun with "
+            "--force-restart-chrome."
+        )
+        return
+
+    logger.warning("Closing Chrome and relaunching it with CDP and extension support.")
+    terminate_chrome_processes()
+    time.sleep(2)
+    if _start_and_wait_for_chrome(
+        cdp_url, timeout_ms=timeout_ms, extension_path=extension_path
+    ):
+        logger.info("Chrome CDP is ready after restart: %s", cdp_url)
+        return
+    logger.warning("Chrome CDP still unavailable after forced restart: %s", cdp_url)
+
+
+def _start_and_wait_for_chrome(
+    cdp_url: str,
+    *,
+    timeout_ms: int,
+    extension_path: Path | None,
+) -> bool:
+    logger = logging.getLogger(__name__)
+    try:
+        start_chrome_cdp(cdp_url, extension_path=extension_path)
+    except (OSError, RuntimeError) as exc:
+        logger.warning("Unable to auto-start Chrome for CDP: %s", exc)
+        return False
+    return wait_for_chrome_cdp(cdp_url, timeout_ms=timeout_ms)
+
+
+def _should_restart_chrome(*, force_restart: bool) -> bool:
+    if force_restart:
+        return True
+    if not sys.stdin.isatty():
+        return False
+    answer = input(
+        "Chrome semble déjà ouvert sans CDP/extension. "
+        "Fermer Chrome et le relancer avec CDP + extension ? [y/N] "
+    )
+    return answer.strip().lower() in {"y", "yes", "o", "oui"}
 
 
 if __name__ == "__main__":

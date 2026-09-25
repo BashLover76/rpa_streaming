@@ -9,6 +9,7 @@
   },
   "rpa": {
     "start_url": "https://www.netflix.com/viewingactivity",
+    "login_url": "https://www.netflix.com/login",
     "wait_after_login_seconds": 12,
     "requires_browser_extension": false,
     "strict_history_scope": true,
@@ -16,6 +17,10 @@
       "history_container": "[data-uia='viewing-activity'], .retable",
       "history_rows": ".retableRow:has(a[href*='/title/']), [data-uia='viewing-activity'] li:has(a[href*='/title/'])",
       "cookie_accept": "button:has-text('Accepter'), button:has-text('Accept')",
+      "logged_in_indicator": ".retable, [data-uia='viewing-activity'], a[href*='viewingactivity']",
+      "login_email": "input[name='userLoginId'], input[type='email']",
+      "login_password": "input[name='password'], input[type='password']",
+      "login_submit": "button[type='submit'], button:has-text('S’identifier'), button:has-text('Se connecter'), button:has-text('Sign In')",
       "show_more": "button:has-text('Afficher plus'), button:has-text('Show More')"
     }
   }

@@ -48,6 +48,9 @@ python main_ingestion.py --cdp-url http://127.0.0.1:9222 --cdp-timeout-ms 30000
 # Desactiver le lancement automatique de Chrome si le port CDP ne repond pas
 python main_ingestion.py --cdp-url http://127.0.0.1:9222 --no-auto-start-chrome
 
+# Si Chrome est deja ouvert sans CDP/extension, le fermer et le relancer automatiquement
+python main_ingestion.py --cdp-url http://127.0.0.1:9222 --force-restart-chrome
+
 # Mode full : parcours complet selon les limites de chaque plateforme
 python main_ingestion.py --cdp-url http://127.0.0.1:9222 --rpa-mode full
 
@@ -834,10 +837,20 @@ python tools/enriched_stats.py
 
 ## Premier lancement RPA
 
-1. Lance le RPA sans `--headless`.
-2. Connecte-toi manuellement aux plateformes dans la fenêtre Chromium Playwright.
-3. Laisse le script atteindre les pages d'historique ou d'accueil.
-4. Relance ensuite la synchronisation; les cookies restent dans `.playwright-profile`.
+Le flux recommandé est maintenant le plus automatique possible:
+
+1. Renseigne les variables `*_EMAIL` et `*_PASSWORD` nécessaires dans `.env`.
+2. Lance Chrome en CDP, ou laisse `main_ingestion.py` le démarrer si `RPA_CDP_URL` est défini.
+3. L'ingestion charge automatiquement l'extension locale au démarrage de Chrome et tente le login RPA sur chaque plateforme.
+4. Si une plateforme impose MFA, CAPTCHA ou validation appareil, termine cette étape dans Chrome; la session restera conservée ensuite.
+
+Commande Windows/WSL validée pour démarrer Chrome manuellement en CDP:
+
+```powershell
+powershell.exe -NoProfile -Command "Start-Process chrome.exe '--remote-debugging-port=9222 --remote-allow-origins=* --user-data-dir=$env:LOCALAPPDATA\Google\Chrome\User Data'"
+```
+
+Si Chrome est déjà ouvert sans `--remote-debugging-port`, le script propose de le fermer et de le relancer avec CDP + extension. Pour accepter automatiquement, utilise `--force-restart-chrome`. Une extension Chrome ne peut pas être injectée dans une session CDP déjà ouverte; elle est chargée automatiquement uniquement au lancement de Chrome.
 
 Les artefacts de debug sont créés dans:
 
@@ -874,7 +887,7 @@ Variables API:
 | `CRUNCHYROLL_PROFILE_ID` | Profil Crunchyroll optionnel |
 | `CRUNCHYROLL_LOCALE` | Locale, par défaut `fr-FR` |
 
-Variables RPA réservées:
+Variables RPA de connexion:
 
 ```text
 NETFLIX_EMAIL=
@@ -891,9 +904,11 @@ MAX_EMAIL=
 MAX_PASSWORD=
 PARAMOUNT_PLUS_EMAIL=
 PARAMOUNT_PLUS_PASSWORD=
+OCS_EMAIL=
+OCS_PASSWORD=
 ```
 
-Elles sont prévues pour de futurs flows de login automatisés. Pour l'instant, la méthode recommandée est la connexion manuelle dans Chromium persistant.
+Ces credentials sont utilisés par le RPA pour remplir les écrans de connexion. Ils ne sont pas écrits dans les logs. La connexion manuelle ne reste nécessaire que pour les validations interactives comme MFA, CAPTCHA ou approbation d'un nouvel appareil.
 
 ## Notes API et RPA
 

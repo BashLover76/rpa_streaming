@@ -9,12 +9,17 @@
   },
   "rpa": {
     "start_url": "https://www.hbomax.com/fr/fr",
+    "login_url": "https://www.hbomax.com/fr/fr/login",
     "wait_after_login_seconds": 18,
     "requires_browser_extension": true,
     "selectors": {
       "history_container": "main, [role='main'], div:has-text('Continuer à regarder'), div:has-text('Continue Watching')",
       "history_rows": "a[href*='/series/'], a[href*='/show/'], article, [data-testid*='tile']",
       "cookie_accept": "button:has-text('Accepter'), button:has-text('Accept')",
+      "logged_in_indicator": "main:has-text('Continuer'), main:has-text('Continue Watching')",
+      "login_email": "input[type='email'], input[name='email'], input[name='username']",
+      "login_password": "input[type='password'], input[name='password']",
+      "login_submit": "button[type='submit'], button:has-text('Se connecter'), button:has-text('Connexion'), button:has-text('Sign In')",
       "show_more": "button:has-text('Voir plus'), button:has-text('See All')"
     }
   }

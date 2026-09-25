@@ -9,6 +9,7 @@
   },
   "rpa": {
     "start_url": "https://www.disneyplus.com/home",
+    "login_url": "https://www.disneyplus.com/login",
     "wait_after_login_seconds": 18,
     "requires_browser_extension": true,
     "strict_history_scope": true,
@@ -16,6 +17,10 @@
       "history_container": "[data-testid='cw-set-item-wrapper']",
       "history_rows": "[data-testid='cw-set-item-wrapper']",
       "cookie_accept": "button:has-text('Accepter'), button:has-text('Accept')",
+      "logged_in_indicator": "[data-testid='cw-set-item-wrapper'], a[href*='/home']",
+      "login_email": "input[type='email'], input[name='email']",
+      "login_password": "input[type='password'], input[name='password']",
+      "login_submit": "button[type='submit'], button:has-text('Continuer'), button:has-text('Se connecter'), button:has-text('Log In')",
       "show_more": "button:has-text('Voir plus'), button:has-text('More')"
     }
   }

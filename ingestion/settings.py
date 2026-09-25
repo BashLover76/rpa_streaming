@@ -32,10 +32,49 @@ class Settings:
     crunchyroll_authorization: str
     crunchyroll_profile_id: str
     crunchyroll_locale: str
+    rpa_credentials: dict[str, dict[str, str]]
 
     @classmethod
     def from_env(cls) -> "Settings":
         extension_path = os.getenv("RPA_BROWSER_EXTENSION_PATH", "").strip()
+        credentials = {
+            "crunchyroll": {
+                "email": os.getenv("CRUNCHYROLL_EMAIL", ""),
+                "password": os.getenv("CRUNCHYROLL_PASSWORD", ""),
+            },
+            "netflix": {
+                "email": os.getenv("NETFLIX_EMAIL", ""),
+                "password": os.getenv("NETFLIX_PASSWORD", ""),
+            },
+            "prime_video": {
+                "email": os.getenv("PRIME_VIDEO_EMAIL", ""),
+                "password": os.getenv("PRIME_VIDEO_PASSWORD", ""),
+            },
+            "disney_plus": {
+                "email": os.getenv("DISNEY_PLUS_EMAIL", ""),
+                "password": os.getenv("DISNEY_PLUS_PASSWORD", ""),
+            },
+            "canal_plus": {
+                "email": os.getenv("CANAL_PLUS_EMAIL", ""),
+                "password": os.getenv("CANAL_PLUS_PASSWORD", ""),
+            },
+            "apple_tv_plus": {
+                "email": os.getenv("APPLE_TV_EMAIL", ""),
+                "password": os.getenv("APPLE_TV_PASSWORD", ""),
+            },
+            "max": {
+                "email": os.getenv("MAX_EMAIL", ""),
+                "password": os.getenv("MAX_PASSWORD", ""),
+            },
+            "paramount_plus": {
+                "email": os.getenv("PARAMOUNT_PLUS_EMAIL", ""),
+                "password": os.getenv("PARAMOUNT_PLUS_PASSWORD", ""),
+            },
+            "ocs": {
+                "email": os.getenv("OCS_EMAIL", ""),
+                "password": os.getenv("OCS_PASSWORD", ""),
+            },
+        }
         return cls(
             betaseries_api_key=os.getenv("BETASERIES_API_KEY", ""),
             betaseries_client_secret=os.getenv(
@@ -65,4 +104,5 @@ class Settings:
             crunchyroll_authorization=os.getenv("CRUNCHYROLL_AUTHORIZATION", ""),
             crunchyroll_profile_id=os.getenv("CRUNCHYROLL_PROFILE_ID", ""),
             crunchyroll_locale=os.getenv("CRUNCHYROLL_LOCALE", "fr-FR"),
+            rpa_credentials=credentials,
         )
