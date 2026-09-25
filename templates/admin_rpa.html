@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Admin - relance RPA{% endblock %}
+{% block content %}
+<section class="admin-heading">
+  <div><p class="eyebrow">Administration locale</p><h1>Relance RPA</h1></div>
+  <p class="muted">Chaque relance part en arrière-plan et écrit son propre log.</p>
+</section>
+<nav class="admin-tabs">
+  <a href="{{ url_for('admin_delete_view') }}">Suppressions</a>
+  <a aria-current="page" href="{{ url_for('admin_rpa_view') }}">Relance RPA</a>
+  <a href="{{ url_for('admin_logs_view') }}">Logs</a>
+  <a href="{{ url_for('admin_kpis_view') }}">KPIs</a>
+</nav>
+
+{% if request.args.get('rpa_started') %}<p class="notice">RPA {{ platform_labels.get(request.args.get('rpa_started'), request.args.get('rpa_started')) }} ajouté à la file. Log : {{ request.args.get('rpa_log') }}</p>{% endif %}
+
+<section class="admin-section">
+  <h2>Plateformes</h2>
+  <div class="admin-actions">
+    {% for item in platforms %}
+      <form method="post" action="{{ url_for('admin_run_rpa', platform=item.platform) }}">
+        <button type="submit"><b class="platform-mark platform-{{ item.platform }}">{{ item.label }}</b></button>
+      </form>
+    {% else %}
+      <p class="empty">Aucune plateforme configurée.</p>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="admin-section">
+  <h2>Process en cours</h2>
+  {% if rpa_state.current %}
+    <article class="admin-rpa-current">
+      <div>
+        <span class="platform-label"><b class="platform-mark platform-{{ rpa_state.current.platform }}">{{ rpa_state.current.label }}</b></span>
+        <p class="muted">Démarré : {{ rpa_state.current.started_at }} · Log : {{ rpa_state.current.log_name }}</p>
+      </div>
+      <pre>{{ rpa_state.current.log_tail or "En attente des premières lignes de log..." }}</pre>
+    </article>
+  {% else %}
+    <p class="empty">Aucune ingestion RPA en cours.</p>
+  {% endif %}
+</section>
+
+<section class="admin-section">
+  <h2>File d’attente</h2>
+  <div class="admin-list">
+  {% for job in rpa_state.queue %}
+    <article class="admin-row">
+      <div>
+        <span class="platform-label"><b class="platform-mark platform-{{ job.platform }}">{{ job.label }}</b></span>
+        <span>Demandé : {{ job.created_at }}</span>
+      </div>
+      <div class="row-meta"><span>{{ job.log_name }}</span></div>
+    </article>
+  {% else %}
+    <p class="empty">Aucun job en attente.</p>
+  {% endfor %}
+  </div>
+</section>
+
+<section class="admin-section">
+  <h2>Derniers logs RPA admin</h2>
+  <div class="admin-logs">
+  {% for log in rpa_state.recent_logs %}
+    <article>
+      <h3>{{ log.name }}</h3>
+      <p class="muted">Dernière mise à jour : {{ log.updated_at }}</p>
+      <pre>{{ log.content }}</pre>
+    </article>
+  {% else %}
+    <p class="empty">Aucun log RPA admin trouvé.</p>
+  {% endfor %}
+  </div>
+</section>
+{% endblock %}

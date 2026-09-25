@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Admin - suppressions{% endblock %}
+{% block content %}
+<section class="admin-heading">
+  <div><p class="eyebrow">Administration locale</p><h1>Suppressions</h1></div>
+  <p class="muted">Chaque suppression crée une sauvegarde SQLite.</p>
+</section>
+<nav class="admin-tabs">
+  <a aria-current="page" href="{{ url_for('admin_delete_view') }}">Suppressions</a>
+  <a href="{{ url_for('admin_rpa_view') }}">Relance RPA</a>
+  <a href="{{ url_for('admin_logs_view') }}">Logs</a>
+  <a href="{{ url_for('admin_kpis_view') }}">KPIs</a>
+</nav>
+
+{% if request.args.get('deleted') %}<p class="notice">Série supprimée. Sauvegarde : {{ request.args.get('backup') }}</p>{% endif %}
+{% if request.args.get('deleted_movie') %}<p class="notice">Film supprimé. Sauvegarde : {{ request.args.get('backup') }}</p>{% endif %}
+
+<section class="admin-section">
+  <h2>Suppression série</h2>
+  <form class="filters" method="get">
+    <input name="q" value="{{ query }}" placeholder="Rechercher une série">
+    <input type="hidden" name="movie_q" value="{{ movie_query }}">
+    <button type="submit">Rechercher</button>
+  </form>
+  <div class="admin-list">
+  {% for item in series %}
+    <article class="admin-row">
+      <div><strong>{{ item.titre }}</strong><span>{{ platform_labels.get(item.platform, item.platform) }}</span></div>
+      <div class="row-meta"><span>{{ item.history_count }} historiques</span><span>{{ item.calendar_count }} dates</span></div>
+      <form method="post" action="{{ url_for('admin_delete_series', series_id=item.id) }}" onsubmit="return confirm('Supprimer cette série et toutes ses données locales ?');">
+        <label for="confirm-series-{{ item.id }}">Écrire SUPPRIMER</label>
+        <input id="confirm-series-{{ item.id }}" name="confirmation" required pattern="SUPPRIMER" autocomplete="off">
+        <button class="danger" type="submit">Supprimer</button>
+      </form>
+    </article>
+  {% else %}<p class="empty">Aucune série trouvée.</p>{% endfor %}
+  </div>
+</section>
+
+<section class="admin-section">
+  <h2>Suppression film</h2>
+  <form class="filters" method="get">
+    <input type="hidden" name="q" value="{{ query }}">
+    <input name="movie_q" value="{{ movie_query }}" placeholder="Rechercher un film">
+    <button type="submit">Rechercher</button>
+  </form>
+  <div class="admin-list">
+  {% for item in movies %}
+    <article class="admin-row">
+      <div><strong>{{ item.titre }}</strong><span>{{ platform_labels.get(item.platform, item.platform) }}</span></div>
+      <div class="row-meta">
+        <span>{{ item.history_count }} historiques</span>
+        {% if item.last_watched_at %}<span>Vu : {{ item.last_watched_at }}</span>{% endif %}
+      </div>
+      <form method="post" action="{{ url_for('admin_delete_movie', movie_id=item.id) }}" onsubmit="return confirm('Supprimer ce film et toutes ses données locales ?');">
+        <label for="confirm-movie-{{ item.id }}">Écrire SUPPRIMER</label>
+        <input id="confirm-movie-{{ item.id }}" name="confirmation" required pattern="SUPPRIMER" autocomplete="off">
+        <button class="danger" type="submit">Supprimer</button>
+      </form>
+    </article>
+  {% else %}<p class="empty">Aucun film trouvé.</p>{% endfor %}
+  </div>
+</section>
+{% endblock %}

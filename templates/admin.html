@@ -2,25 +2,12 @@
 {% block title %}Administration{% endblock %}
 {% block content %}
 <section class="admin-heading">
-  <div><p class="eyebrow">Administration locale</p><h1>Supprimer des séries</h1></div>
-  <p class="muted">Une sauvegarde SQLite est créée avant chaque suppression.</p>
+  <div><p class="eyebrow">Administration locale</p><h1>Console admin</h1></div>
 </section>
-<form class="filters" method="get">
-  <input name="q" value="{{ query }}" placeholder="Rechercher une série">
-  <button type="submit">Rechercher</button>
-</form>
-{% if request.args.get('deleted') %}<p class="notice">Série supprimée. Sauvegarde : {{ request.args.get('backup') }}</p>{% endif %}
-<section class="admin-list">
-{% for item in series %}
-  <article class="admin-row">
-    <div><strong>{{ item.titre }}</strong><span>{{ platform_labels.get(item.platform, item.platform) }}</span></div>
-    <div class="row-meta"><span>{{ item.history_count }} historiques</span><span>{{ item.calendar_count }} dates</span></div>
-    <form method="post" action="{{ url_for('admin_delete_series', series_id=item.id) }}" onsubmit="return confirm('Supprimer cette série et toutes ses données locales ?');">
-      <label for="confirm-{{ item.id }}">Écrire SUPPRIMER</label>
-      <input id="confirm-{{ item.id }}" name="confirmation" required pattern="SUPPRIMER" autocomplete="off">
-      <button class="danger" type="submit">Supprimer</button>
-    </form>
-  </article>
-{% else %}<p class="empty">Aucune série trouvée.</p>{% endfor %}
-</section>
+<nav class="admin-tabs">
+  <a href="{{ url_for('admin_delete_view') }}">Suppressions</a>
+  <a href="{{ url_for('admin_rpa_view') }}">Relance RPA</a>
+  <a href="{{ url_for('admin_logs_view') }}">Logs</a>
+  <a href="{{ url_for('admin_kpis_view') }}">KPIs</a>
+</nav>
 {% endblock %}

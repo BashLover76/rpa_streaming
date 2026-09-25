@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Admin - logs{% endblock %}
+{% block content %}
+<section class="admin-heading">
+  <div><p class="eyebrow">Administration locale</p><h1>Logs d’ingestion</h1></div>
+  <p class="muted">Affichage des deux derniers fichiers d’ingestion.</p>
+</section>
+<nav class="admin-tabs">
+  <a href="{{ url_for('admin_delete_view') }}">Suppressions</a>
+  <a href="{{ url_for('admin_rpa_view') }}">Relance RPA</a>
+  <a aria-current="page" href="{{ url_for('admin_logs_view') }}">Logs</a>
+  <a href="{{ url_for('admin_kpis_view') }}">KPIs</a>
+</nav>
+
+<section class="admin-section">
+  <div class="admin-logs">
+  {% for log in ingestion_logs %}
+    <article>
+      <h3>{{ log.name }}</h3>
+      <p class="muted">Dernière mise à jour : {{ log.updated_at }}</p>
+      <pre>{{ log.content }}</pre>
+    </article>
+  {% else %}
+    <p class="empty">Aucun log d’ingestion trouvé.</p>
+  {% endfor %}
+  </div>
+</section>
+{% endblock %}
