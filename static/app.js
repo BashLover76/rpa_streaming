@@ -1,7 +1,8 @@
 (() => {
-  const input = document.querySelector("#series-search");
-  const datalist = document.querySelector("#series-suggestions");
+  const input = document.querySelector("#series-search, #movie-search");
+  const datalist = input ? document.querySelector(`#${input.getAttribute("list")}`) : null;
   if (!input || !datalist) return;
+  const suggestUrl = input.dataset.suggestUrl || "/api/series/suggest";
 
   let requestTimer;
   input.addEventListener("input", () => {
@@ -15,7 +16,7 @@
     requestTimer = window.setTimeout(async () => {
       try {
         const response = await fetch(
-          `/api/series/suggest?q=${encodeURIComponent(query)}`
+          `${suggestUrl}?q=${encodeURIComponent(query)}`
         );
         if (!response.ok) return;
         const suggestions = await response.json();
