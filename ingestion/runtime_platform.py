@@ -50,17 +50,54 @@ def chrome_cdp_ready(cdp_url: str) -> bool:
     return bool(payload.get("webSocketDebuggerUrl"))
 
 
-def start_chrome_cdp(cdp_url: str = "http://127.0.0.1:9222") -> None:
+def start_chrome_cdp(
+    cdp_url: str = "http://127.0.0.1:9222",
+    *,
+    extension_path: Path | None = None,
+) -> None:
     runtime = detect_runtime_platform()
     port = _cdp_port(cdp_url)
     if runtime.is_wsl:
-        _start_windows_chrome_from_wsl(port)
+        _start_windows_chrome_from_wsl(port, extension_path)
     elif runtime.is_windows:
-        _start_windows_chrome(port)
+        _start_windows_chrome(port, extension_path)
     elif runtime.is_linux:
-        _start_linux_chrome(port)
+        _start_linux_chrome(port, extension_path)
     else:
         raise RuntimeError(f"Unsupported OS for Chrome auto-start: {runtime.system}")
+
+
+def terminate_chrome_processes() -> None:
+    runtime = detect_runtime_platform()
+    if runtime.is_wsl or runtime.is_windows:
+        subprocess.run(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-Command",
+                "Stop-Process -Name chrome -Force -ErrorAction SilentlyContinue",
+            ],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return
+    if runtime.is_linux:
+        for process_name in (
+            "google-chrome",
+            "google-chrome-stable",
+            "chromium",
+            "chromium-browser",
+            "chrome",
+        ):
+            subprocess.run(
+                ["pkill", "-f", process_name],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        return
+    raise RuntimeError(f"Unsupported OS for Chrome restart: {runtime.system}")
 
 
 def wait_for_chrome_cdp(cdp_url: str, *, timeout_ms: int) -> bool:
@@ -79,11 +116,13 @@ def _cdp_port(cdp_url: str) -> int:
         return 9222
 
 
-def _start_windows_chrome_from_wsl(port: int) -> None:
+def _start_windows_chrome_from_wsl(port: int, extension_path: Path | None) -> None:
+    extension_args = _windows_extension_args_from_wsl(extension_path)
     command = (
         "Start-Process chrome.exe "
         f"'--remote-debugging-port={port} --remote-allow-origins=\\* "
-        "--user-data-dir=$env:LOCALAPPDATA\\Google\\Chrome\\User Data'"
+        "--user-data-dir=$env:LOCALAPPDATA\\Google\\Chrome\\User Data"
+        f"{extension_args}'"
     )
     subprocess.run(
         ["powershell.exe", "-NoProfile", "-Command", command],
@@ -93,11 +132,13 @@ def _start_windows_chrome_from_wsl(port: int) -> None:
     )
 
 
-def _start_windows_chrome(port: int) -> None:
+def _start_windows_chrome(port: int, extension_path: Path | None) -> None:
+    extension_args = _extension_args(extension_path)
     command = (
         "Start-Process chrome.exe "
         f"'--remote-debugging-port={port} --remote-allow-origins=* "
-        "--user-data-dir=$env:LOCALAPPDATA\\Google\\Chrome\\User Data'"
+        "--user-data-dir=$env:LOCALAPPDATA\\Google\\Chrome\\User Data"
+        f"{extension_args}'"
     )
     subprocess.run(
         ["powershell.exe", "-NoProfile", "-Command", command],
@@ -107,7 +148,7 @@ def _start_windows_chrome(port: int) -> None:
     )
 
 
-def _start_linux_chrome(port: int) -> None:
+def _start_linux_chrome(port: int, extension_path: Path | None) -> None:
     executable = (
         shutil.which("google-chrome")
         or shutil.which("google-chrome-stable")
@@ -118,17 +159,59 @@ def _start_linux_chrome(port: int) -> None:
         raise RuntimeError("Chrome/Chromium executable not found in PATH")
     profile_dir = Path(os.getenv("RPA_LINUX_CHROME_PROFILE", "~/.config/rpa-streaming-chrome")).expanduser()
     profile_dir.mkdir(parents=True, exist_ok=True)
+    args = [
+        executable,
+        f"--remote-debugging-port={port}",
+        "--remote-allow-origins=*",
+        f"--user-data-dir={profile_dir}",
+    ]
+    args.extend(_linux_extension_args(extension_path))
     subprocess.Popen(
-        [
-            executable,
-            f"--remote-debugging-port={port}",
-            "--remote-allow-origins=*",
-            f"--user-data-dir={profile_dir}",
-        ],
+        args,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
+
+
+def _extension_args(extension_path: Path | None) -> str:
+    if not extension_path:
+        return ""
+    resolved = extension_path.expanduser().resolve()
+    if not resolved.exists():
+        return ""
+    return f" --disable-extensions-except={resolved} --load-extension={resolved}"
+
+
+def _linux_extension_args(extension_path: Path | None) -> list[str]:
+    if not extension_path:
+        return []
+    resolved = extension_path.expanduser().resolve()
+    if not resolved.exists():
+        return []
+    return [
+        f"--disable-extensions-except={resolved}",
+        f"--load-extension={resolved}",
+    ]
+
+
+def _windows_extension_args_from_wsl(extension_path: Path | None) -> str:
+    if not extension_path:
+        return ""
+    resolved = extension_path.expanduser().resolve()
+    if not resolved.exists():
+        return ""
+    try:
+        completed = subprocess.run(
+            ["wslpath", "-w", str(resolved)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        windows_path = completed.stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        windows_path = str(resolved)
+    return f" --disable-extensions-except={windows_path} --load-extension={windows_path}"
 
 
 @contextlib.contextmanager

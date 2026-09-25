@@ -43,6 +43,7 @@ class PlatformConfig:
     scroll_wait_ms: int = 750
     content_type: str = "all"
     profile_name: str | None = None
+    login_url: str | None = None
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "PlatformConfig":
@@ -63,6 +64,7 @@ class PlatformConfig:
             scroll_wait_ms=int(rpa.get("scroll_wait_ms", 750)),
             content_type=rpa.get("content_type", "all"),
             profile_name=rpa.get("profile_name"),
+            login_url=rpa.get("login_url"),
         )
 
 
@@ -81,6 +83,7 @@ class SelfHealingRPA:
         continue_on_cdp_error: bool = True,
         rpa_mode: str = "full",
         differential_known_threshold: int = 20,
+        credentials: dict[str, dict[str, str]] | None = None,
     ) -> None:
         self.db = db
         self.ollama = ollama
@@ -93,6 +96,7 @@ class SelfHealingRPA:
         self.continue_on_cdp_error = continue_on_cdp_error
         self.rpa_mode = rpa_mode
         self.differential_known_threshold = differential_known_threshold
+        self.credentials = credentials or {}
 
     def run_platforms(self, platform_configs: list[PlatformConfig]) -> dict[str, int]:
         results: dict[str, int] = {}
@@ -235,6 +239,7 @@ class SelfHealingRPA:
         LOGGER.info("RPA page url=%s title=%s", _safe_page_url(page.url), page.title())
 
         self._optional_click(page, config, "cookie_accept")
+        self._login_if_needed(page, config)
         if config.name == "canal_plus":
             return self._run_canal_plus_platform(page, config)
         try:
@@ -813,6 +818,80 @@ class SelfHealingRPA:
             page.locator(selector).first.click(timeout=3_000)
         except Exception:
             LOGGER.debug("Optional selector was not actionable: %s", selector_key)
+
+    def _login_if_needed(self, page: Page, config: PlatformConfig) -> None:
+        credentials = self.credentials.get(config.name, {})
+        email = credentials.get("email", "").strip()
+        password = credentials.get("password", "")
+        if not email or not password:
+            return
+        if self._selector_is_visible(page, config.selectors.get("logged_in_indicator")):
+            LOGGER.info("%s already authenticated; skipping RPA login.", config.name)
+            return
+
+        LOGGER.info("%s credentials found in .env; attempting RPA login.", config.name)
+        try:
+            self._optional_click(page, config, "login_link")
+            if config.login_url and not self._selector_is_visible(
+                page, config.selectors.get("login_email"), timeout_ms=2_000
+            ):
+                page.goto(
+                    config.login_url, wait_until="domcontentloaded", timeout=60_000
+                )
+                self._optional_click(page, config, "cookie_accept")
+
+            email_filled = self._fill_first_visible(
+                page, config.selectors.get("login_email"), email
+            )
+            if email_filled:
+                self._optional_click(page, config, "login_submit")
+                page.wait_for_timeout(2_000)
+
+            password_filled = self._fill_first_visible(
+                page, config.selectors.get("login_password"), password
+            )
+            if not password_filled:
+                LOGGER.warning(
+                    "%s login password field unavailable; continuing with current session.",
+                    config.name,
+                )
+                return
+
+            self._optional_click(page, config, "login_submit")
+            page.wait_for_timeout(max(3_000, config.wait_after_login_seconds * 1000))
+            page.goto(config.start_url, wait_until="domcontentloaded", timeout=60_000)
+            page.wait_for_timeout(2_000)
+            LOGGER.info("%s RPA login completed; continuing ingestion.", config.name)
+        except Exception as exc:
+            LOGGER.warning(
+                "%s RPA login failed; continuing with current browser state: %s",
+                config.name,
+                exc,
+            )
+
+    @staticmethod
+    def _selector_is_visible(
+        page: Page, selector: str | None, *, timeout_ms: int = 3_000
+    ) -> bool:
+        if not selector:
+            return False
+        try:
+            page.locator(selector).first.wait_for(state="visible", timeout=timeout_ms)
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def _fill_first_visible(page: Page, selector: str | None, value: str) -> bool:
+        if not selector:
+            return False
+        try:
+            field = page.locator(selector).first
+            field.wait_for(state="visible", timeout=5_000)
+            field.fill(value, timeout=5_000)
+            return True
+        except Exception:
+            return False
 
     def _safe_action(
         self,
