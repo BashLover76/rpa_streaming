@@ -1,21 +1,94 @@
 {% extends "base.html" %}
-{% block title %}Films{% endblock %}
+
+{% block title %}Films par plateformes{% endblock %}
+
 {% block content %}
 <section class="summary">
-  <div><h1>Films</h1><p>Historique et catalogue des films issus des plateformes.</p></div>
+  <div>
+    <h1>Films par plateformes</h1>
+    <p>Vue locale issue des historiques de streaming, enrichie avec BetaSeries et IMDb.</p>
+  </div>
+  <div class="stats">
+    <span><strong>{{ stats.movies }}</strong>Films</span>
+    <span><strong>{{ stats.platforms }}</strong>Plateformes</span>
+    <span><strong>{{ stats.history }}</strong>Historiques</span>
+  </div>
 </section>
+
 <form class="filters" method="get">
-  <input name="q" value="{{ query }}" placeholder="Rechercher un film">
-  <button class="search-submit" type="submit">GO</button>
+  <div class="search-box">
+    <input id="movie-search" name="q" value="{{ query }}" placeholder="Rechercher un film" autocomplete="off" list="movie-suggestions" data-suggest-url="{{ url_for('movie_suggestions') }}">
+    <datalist id="movie-suggestions"></datalist>
+    <button class="search-submit" type="submit" aria-label="Rechercher">GO</button>
+  </div>
+  <select name="platform">
+    <option value="">Toutes les plateformes</option>
+    {% for item in platforms %}
+      <option value="{{ item.platform }}" {% if selected_platform == item.platform %}selected{% endif %}>
+        {{ platform_labels.get(item.platform, item.platform) }} ({{ item.total }})
+      </option>
+    {% endfor %}
+  </select>
+  <select name="genre">
+    <option value="">Tous les genres</option>
+    {% for genre in genres %}
+      <option value="{{ genre }}" {% if selected_genre == genre %}selected{% endif %}>{{ genre }}</option>
+    {% endfor %}
+  </select>
 </form>
-<section class="movie-grid">
-  {% for movie in movies %}
-  <a class="movie-card" href="{{ url_for('series_detail', series_id=movie.id) }}">
-    {% if movie.poster_url %}<img src="{{ movie.poster_url }}" alt="" loading="lazy">{% endif %}
-    <strong>{{ movie.titre }}</strong>
-    <span>{{ platform_labels.get(movie.platform, movie.platform) }}</span>
-    {% if movie.creation_year %}<small>{{ movie.creation_year }}</small>{% endif %}
-  </a>
-  {% else %}<p class="empty">Aucun film trouvé.</p>{% endfor %}
+
+<section class="platform-grid">
+  {% for item in platforms %}
+    <a class="platform-pill" href="{{ url_for('movies_view', platform=item.platform) }}">
+      <span class="platform-label"><b class="platform-mark platform-{{ item.platform }}">{{ platform_labels.get(item.platform, item.platform) }}</b></span>
+      <strong>{{ item.total }}</strong>
+    </a>
+  {% endfor %}
 </section>
+
+<section class="series-list">
+  {% for movie in movies %}
+    <a class="series-row" href="{{ url_for('series_detail', series_id=movie.id) }}">
+      {% if movie.poster_url %}
+        <img class="series-thumb" src="{{ movie.poster_url }}" alt="" loading="lazy">
+      {% else %}
+        <div class="series-thumb placeholder"></div>
+      {% endif %}
+      <div class="series-copy">
+        <strong>{{ movie.titre }}</strong>
+        <span class="platform-label"><b class="platform-mark platform-{{ movie.plateforme }}">{{ platform_labels.get(movie.plateforme, movie.plateforme) }}</b></span>
+        {% if movie.creation_year %}<span>{{ movie.creation_year }}</span>{% endif %}
+      </div>
+      <div class="row-meta">
+        {% if movie.imdb_rating %}<span>IMDb {{ "%.1f"|format(movie.imdb_rating) }}</span>{% endif %}
+        {% if movie.runtime_minutes %}<span>{{ movie.runtime_minutes }} min</span>{% endif %}
+        {% if movie.history_count %}<span>{{ movie.history_count }} visionnage{% if movie.history_count > 1 %}s{% endif %}</span>{% endif %}
+        {% if movie.last_watched_at %}
+          <span class="next">Vu: {{ movie.last_watched_at }}</span>
+        {% else %}
+          <span class="muted">Aucun visionnage daté</span>
+        {% endif %}
+      </div>
+    </a>
+  {% else %}
+    <p class="empty">Aucun film ne correspond à cette recherche.</p>
+  {% endfor %}
+</section>
+
+<form class="list-controls" method="get">
+  <input type="hidden" name="q" value="{{ query }}"><input type="hidden" name="platform" value="{{ selected_platform }}"><input type="hidden" name="genre" value="{{ selected_genre }}">
+  <label class="page-size">Par page
+    <select name="per_page" onchange="this.form.submit()">
+      {% for size in [10, 20, 50] %}<option value="{{ size }}" {% if per_page == size %}selected{% endif %}>{{ size }}</option>{% endfor %}
+    </select>
+  </label>
+</form>
+{% if total_pages > 1 %}
+<form id="movie-pagination" method="get" class="pagination" aria-label="Pagination des films">
+  <input type="hidden" name="q" value="{{ query }}"><input type="hidden" name="platform" value="{{ selected_platform }}"><input type="hidden" name="genre" value="{{ selected_genre }}"><input type="hidden" name="per_page" value="{{ per_page }}">
+  {% if page > 1 %}<a href="{{ url_for('movies_view', q=query, platform=selected_platform, genre=selected_genre, per_page=per_page, page=page-1) }}">Précédent</a>{% endif %}
+  <span>Page {{ page }} sur {{ total_pages }}</span>
+  {% if page < total_pages %}<a href="{{ url_for('movies_view', q=query, platform=selected_platform, genre=selected_genre, per_page=per_page, page=page+1) }}">Suivant</a>{% endif %}
+</form>
+{% endif %}
 {% endblock %}

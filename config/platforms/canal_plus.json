@@ -12,11 +12,15 @@
     "wait_after_login_seconds": 18,
     "requires_browser_extension": true,
     "strict_history_scope": true,
+    "profile_name": "chris",
     "selectors": {
-      "history_container": "[class*='ContentRow___']:has(h2:has-text('Continuer la lecture'))",
-      "history_rows": "[class*='ContentRow___']:has(h2:has-text('Continuer la lecture')) li a[title][href]",
+      "profile": "button:has(img), a:has(img), [role='button']:has(img), button:not(:has-text('Ajouter')):not(:has-text('Gérer')):not(:has-text('Modifier')), a:not(:has-text('Ajouter')):not(:has-text('Gérer')):not(:has-text('Modifier'))",
+      "my_videos": "a:has-text('Mes vidéos'), a:has-text('Mes videos'), a[href*='mes-videos'], a[href*='my-videos']",
+      "recently_watched": "a:has-text('Vu récemment'), a:has-text('Vus récemment'), button:has-text('Vu récemment'), button:has-text('Vus récemment'), a[href*='vu-recemment'], a[href*='recent']",
+      "history_container": "main, [role='main'], body",
+      "history_rows": "a[title][href*='/'], article a[title][href], li a[title][href], [data-testid*='card'] a[title][href]",
       "cookie_accept": "button:has-text('Accepter'), button:has-text('Continuer sans accepter')",
-      "show_more": "[class*='ContentRow___']:has(h2:has-text('Continuer la lecture')) button:has-text('Voir plus')"
+      "show_more": "button:has-text('Voir plus'), button:has-text('Plus')"
     }
   }
 }

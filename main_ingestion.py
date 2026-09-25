@@ -3,10 +3,14 @@ from __future__ import annotations
 import argparse
 import contextlib
 import fcntl
+import json
 import logging
+import subprocess
 import time
 from pathlib import Path
 from typing import Iterator
+from urllib.parse import urljoin
+from urllib.request import Request, urlopen
 
 import httpx
 
@@ -74,6 +78,11 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=None,
         help="Maximum time to attach to Chrome CDP before skipping RPA.",
+    )
+    parser.add_argument(
+        "--no-auto-start-chrome",
+        action="store_true",
+        help="Do not start Windows Chrome automatically when the CDP endpoint is unreachable.",
     )
     parser.add_argument("--pause-seconds", type=float, default=2.0)
     parser.add_argument("--betaseries-days-before", type=int, default=30)
@@ -161,14 +170,18 @@ def run(args: argparse.Namespace) -> None:
                 raise SystemExit(f"Unknown platform: {args.platform}")
         for platform_config in platform_configs:
             platform_config.content_type = args.content_type
+        cdp_url = args.cdp_url or settings.rpa_cdp_url or None
+        cdp_timeout_ms = args.cdp_timeout_ms or settings.rpa_cdp_timeout_ms
+        if cdp_url and not args.no_auto_start_chrome:
+            ensure_chrome_cdp(cdp_url, timeout_ms=cdp_timeout_ms)
         rpa = SelfHealingRPA(
             db=collector_db,
             ollama=ollama,
             user_data_dir=settings.rpa_user_data_dir,
             headless=args.headless,
             browser_extension_path=settings.rpa_browser_extension_path,
-            cdp_url=args.cdp_url or settings.rpa_cdp_url or None,
-            cdp_timeout_ms=args.cdp_timeout_ms or settings.rpa_cdp_timeout_ms,
+            cdp_url=cdp_url,
+            cdp_timeout_ms=cdp_timeout_ms,
             rpa_mode=args.rpa_mode,
             differential_known_threshold=args.rpa_differential_known_threshold,
         )
@@ -195,6 +208,49 @@ def run(args: argparse.Namespace) -> None:
             logging.getLogger(__name__).warning(
                 "BetaSeries calendar skipped after ingestion: %s", exc
             )
+
+
+def ensure_chrome_cdp(cdp_url: str, *, timeout_ms: int) -> None:
+    """Start Windows Chrome for Playwright CDP when the endpoint is down."""
+    logger = logging.getLogger(__name__)
+    if _chrome_cdp_ready(cdp_url):
+        return
+
+    logger.warning("Chrome CDP is not reachable at %s; starting Chrome.", cdp_url)
+    command = (
+        "Start-Process chrome.exe "
+        "'--remote-debugging-port=9222 --remote-allow-origins=\\* "
+        "--user-data-dir=$env:LOCALAPPDATA\\Google\\Chrome\\User Data'"
+    )
+    try:
+        subprocess.run(
+            ["powershell.exe", "-NoProfile", "-Command", command],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        logger.warning("Unable to auto-start Windows Chrome for CDP: %s", exc)
+        return
+
+    deadline = time.monotonic() + max(5.0, timeout_ms / 1000.0)
+    while time.monotonic() < deadline:
+        if _chrome_cdp_ready(cdp_url):
+            logger.info("Chrome CDP is ready: %s", cdp_url)
+            return
+        time.sleep(0.5)
+    logger.warning("Chrome was started but CDP did not answer before timeout: %s", cdp_url)
+
+
+def _chrome_cdp_ready(cdp_url: str) -> bool:
+    version_url = urljoin(cdp_url.rstrip("/") + "/", "json/version")
+    try:
+        request = Request(version_url, headers={"Accept": "application/json"})
+        with urlopen(request, timeout=2) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return False
+    return bool(payload.get("webSocketDebuggerUrl"))
 
 
 @contextlib.contextmanager

@@ -31,14 +31,17 @@ pour les cartes non structurees et la reparation de selecteurs ; les cartes
 lisibles sont extraites directement du DOM.
 
 ```bash
-# Depuis WSL : relancer Chrome Windows en mode CDP si l'attachement Playwright bloque
-powershell.exe -NoProfile -Command "Start-Process chrome.exe '--remote-debugging-port=9222 --remote-allow-origins=* --user-data-dir=$env:LOCALAPPDATA\Google\Chrome\User Data'"
+# Depuis PowerShell Windows ou WSL : lancer Chrome Windows en mode CDP
+powershell.exe -NoProfile -Command "Start-Process chrome.exe '--remote-debugging-port=9222 --remote-allow-origins=\* --user-data-dir=$env:LOCALAPPDATA\Google\Chrome\User Data'"
 
 # Verification rapide du port CDP
 curl http://127.0.0.1:9222/json/version
 
 # Toutes les plateformes configurees, tous les types de contenus
 python main_ingestion.py --cdp-url http://127.0.0.1:9222 --cdp-timeout-ms 30000
+
+# Desactiver le lancement automatique de Chrome si le port CDP ne repond pas
+python main_ingestion.py --cdp-url http://127.0.0.1:9222 --no-auto-start-chrome
 
 # Mode full : parcours complet selon les limites de chaque plateforme
 python main_ingestion.py --cdp-url http://127.0.0.1:9222 --rpa-mode full
@@ -68,6 +71,8 @@ fiches jamais verifiees sont reprises automatiquement, avec sauvegarde SQLite
 coherente dans `backups/`. `--reconcile-existing` permet de toutes les reverifier.
 `--retry-unresolved` reprend les observations ambigues ou en erreur.
 Les sauvegardes contiennent l'historique personnel : les garder localement.
+Si Chrome ne repond pas encore sur `/json/version`, l'ingestion tente de le
+lancer automatiquement avec la commande CDP documentee ci-dessus.
 Si Chrome repond sur `/json/version` mais que Playwright reste bloque sur le
 WebSocket CDP, l'ingestion RPA est ignoree apres `--cdp-timeout-ms` et la phase
 de reconciliation/enrichissement continue sur les donnees deja collectees.

@@ -124,9 +124,40 @@ def create_app() -> Flask:
     @app.get("/movies")
     def movies_view():
         query = request.args.get("q", "").strip()
-        movies = fetch_movies(query)
+        selected_platform = request.args.get("platform", "").strip()
+        selected_genre = request.args.get("genre", "").strip()
+        try:
+            page = max(1, int(request.args.get("page", 1)))
+            per_page = int(request.args.get("per_page", 10))
+        except ValueError:
+            abort(400, description="Paramètre de pagination invalide.")
+        if per_page not in {10, 20, 50}:
+            abort(400, description="Le nombre d'éléments doit être 10, 20 ou 50.")
+        platforms = fetch_movie_platforms()
+        genres = fetch_genres(content_type="movie")
+        movies = fetch_movies(
+            query=query,
+            platform=selected_platform,
+            genre=selected_genre,
+            limit=per_page,
+            offset=(page - 1) * per_page,
+        )
+        total_movies = count_movies(query, selected_platform, selected_genre)
         return render_template(
-            "movies.html", movies=movies, query=query, platform_labels=PLATFORM_LABELS
+            "movies.html",
+            movies=movies,
+            query=query,
+            selected_platform=selected_platform,
+            selected_genre=selected_genre,
+            platforms=platforms,
+            genres=genres,
+            platform_labels=PLATFORM_LABELS,
+            platform_marks=PLATFORM_MARKS,
+            stats=fetch_movie_stats(),
+            page=page,
+            per_page=per_page,
+            total_movies=total_movies,
+            total_pages=max(1, (total_movies + per_page - 1) // per_page),
         )
 
     @app.get("/series/<int:series_id>")
@@ -276,6 +307,10 @@ def create_app() -> Flask:
     def series_suggestions():
         return jsonify(suggest_series(request.args.get("q", "")))
 
+    @app.get("/api/movies/suggest")
+    def movie_suggestions():
+        return jsonify(suggest_movies(request.args.get("q", "")))
+
     return app
 
 
@@ -300,27 +335,100 @@ def fetch_platforms() -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
-def fetch_movies(query: str = "") -> list[dict[str, Any]]:
+def fetch_movie_platforms() -> list[dict[str, Any]]:
+    rows = get_db().execute("""
+        SELECT COALESCE(plateforme, 'unknown') AS platform, COUNT(*) AS total
+        FROM series AS s
+        WHERE LOWER(COALESCE(s.imdb_kind, '')) IN ('movie', 'film')
+        GROUP BY COALESCE(plateforme, 'unknown')
+        ORDER BY total DESC, platform
+        """).fetchall()
+    return [dict(row) for row in rows]
+
+
+def fetch_movies(
+    query: str = "",
+    platform: str = "",
+    genre: str = "",
+    *,
+    limit: int | None = None,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
     params: list[Any] = []
     where = ["LOWER(COALESCE(s.imdb_kind, '')) IN ('movie', 'film')"]
     if query:
         where.append("LOWER(s.titre) LIKE LOWER(?)")
         params.append(f"%{query}%")
+    if platform:
+        where.append("COALESCE(s.plateforme, 'unknown') = ?")
+        params.append(platform)
+    if genre:
+        where.append("LOWER(COALESCE(s.genres, '')) LIKE LOWER(?)")
+        params.append(f"%{genre}%")
     rows = (
         get_db()
         .execute(
             f"""
-        SELECT s.id, s.titre, s.poster_url, COALESCE(s.plateforme, 'unknown') AS platform,
-               s.synopsis, s.creation_year, s.imdb_rating
+        SELECT
+            s.id,
+            s.titre,
+            s.poster_url,
+            COALESCE(s.plateforme, 'unknown') AS plateforme,
+            s.synopsis,
+            s.creation_year,
+            s.imdb_rating,
+            s.runtime_minutes,
+            COUNT(DISTINCT h.id) AS history_count,
+            MAX(h.date_vu) AS last_watched_at
         FROM series AS s
+        LEFT JOIN history AS h ON h.serie_id = s.id
         WHERE {' AND '.join(where)}
+        GROUP BY s.id
         ORDER BY s.titre COLLATE NOCASE
-        """,
-            params,
+        """ + (" LIMIT ? OFFSET ?" if limit is not None else ""),
+            params + ([limit, offset] if limit is not None else []),
         )
         .fetchall()
     )
     return [dict(row) for row in rows]
+
+
+def count_movies(query: str = "", platform: str = "", genre: str = "") -> int:
+    filters = ["LOWER(COALESCE(s.imdb_kind, '')) IN ('movie', 'film')"]
+    params: list[Any] = []
+    if query:
+        filters.append("LOWER(s.titre) LIKE LOWER(?)")
+        params.append(f"%{query}%")
+    if platform:
+        filters.append("COALESCE(s.plateforme, 'unknown') = ?")
+        params.append(platform)
+    if genre:
+        filters.append("LOWER(COALESCE(s.genres, '')) LIKE LOWER(?)")
+        params.append(f"%{genre}%")
+    return (
+        get_db()
+        .execute(
+            f"SELECT COUNT(*) FROM series AS s WHERE {' AND '.join(filters)}", params
+        )
+        .fetchone()[0]
+    )
+
+
+def fetch_movie_stats() -> dict[str, int]:
+    conn = get_db()
+    return {
+        "movies": conn.execute(
+            "SELECT COUNT(*) FROM series WHERE LOWER(COALESCE(imdb_kind, '')) IN ('movie', 'film')"
+        ).fetchone()[0],
+        "platforms": conn.execute(
+            """SELECT COUNT(DISTINCT COALESCE(plateforme, 'unknown')) FROM series
+               WHERE LOWER(COALESCE(imdb_kind, '')) IN ('movie', 'film')"""
+        ).fetchone()[0],
+        "history": conn.execute(
+            """SELECT COUNT(*) FROM history h JOIN series s ON s.id=h.serie_id
+               WHERE LOWER(COALESCE(s.imdb_kind, '')) IN ('movie', 'film')"""
+        ).fetchone()[0],
+    }
 
 
 def fetch_admin_series(search_term: str = "") -> list[dict[str, Any]]:
@@ -371,9 +479,16 @@ def fetch_stats() -> dict[str, int]:
     }
 
 
-def fetch_genres() -> list[str]:
+def fetch_genres(content_type: str = "series") -> list[str]:
+    kind_filter = (
+        "LOWER(COALESCE(imdb_kind, '')) IN ('movie', 'film')"
+        if content_type == "movie"
+        else "COALESCE(LOWER(imdb_kind), '') NOT IN ('movie', 'film')"
+    )
     values: set[str] = set()
-    for row in get_db().execute("SELECT genres FROM series WHERE genres IS NOT NULL"):
+    for row in get_db().execute(
+        f"SELECT genres FROM series WHERE genres IS NOT NULL AND {kind_filter}"
+    ):
         values.update(parse_genres(row[0]))
     return sorted(values, key=str.casefold)
 
@@ -497,7 +612,7 @@ def search_series(
 
 
 def count_series(query: str = "", platform: str = "", genre: str = "") -> int:
-    filters = ["NOT (s.titre LIKE '__/__/%' OR s.titre LIKE '%Report a problem%')"]
+    filters = [VALID_SERIES_TITLE_SQL]
     params: list[Any] = []
     if query:
         filters.append("LOWER(s.titre) LIKE LOWER(?)")
@@ -528,6 +643,28 @@ def suggest_series(query: str, limit: int = 10) -> list[dict[str, Any]]:
         SELECT id, titre, COALESCE(plateforme, 'unknown') AS platform
         FROM series
         WHERE LOWER(titre) LIKE LOWER(?)
+        ORDER BY titre COLLATE NOCASE
+        LIMIT ?
+        """,
+            (f"%{query}%", limit),
+        )
+        .fetchall()
+    )
+    return [dict(row) for row in rows]
+
+
+def suggest_movies(query: str, limit: int = 10) -> list[dict[str, Any]]:
+    query = query.strip()
+    if not query:
+        return []
+    rows = (
+        get_db()
+        .execute(
+            """
+        SELECT id, titre, COALESCE(plateforme, 'unknown') AS platform
+        FROM series
+        WHERE LOWER(COALESCE(imdb_kind, '')) IN ('movie', 'film')
+          AND LOWER(titre) LIKE LOWER(?)
         ORDER BY titre COLLATE NOCASE
         LIMIT ?
         """,

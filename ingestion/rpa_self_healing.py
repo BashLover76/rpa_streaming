@@ -42,6 +42,7 @@ class PlatformConfig:
     max_scroll_steps: int = 200
     scroll_wait_ms: int = 750
     content_type: str = "all"
+    profile_name: str | None = None
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "PlatformConfig":
@@ -61,6 +62,7 @@ class PlatformConfig:
             max_scroll_steps=int(rpa.get("max_scroll_steps", 200)),
             scroll_wait_ms=int(rpa.get("scroll_wait_ms", 750)),
             content_type=rpa.get("content_type", "all"),
+            profile_name=rpa.get("profile_name"),
         )
 
 
@@ -233,10 +235,22 @@ class SelfHealingRPA:
         LOGGER.info("RPA page url=%s title=%s", _safe_page_url(page.url), page.title())
 
         self._optional_click(page, config, "cookie_accept")
-        container_selector = self._healing_wait_for_selector(
-            page, config, "history_container"
-        )
-        row_selector = self._healing_wait_for_selector(page, config, "history_rows")
+        if config.name == "canal_plus":
+            return self._run_canal_plus_platform(page, config)
+        try:
+            container_selector = self._healing_wait_for_selector(
+                page, config, "history_container"
+            )
+            row_selector = self._healing_wait_for_selector(page, config, "history_rows")
+        except RuntimeError as exc:
+            if self._history_unavailable_is_nonfatal(config):
+                LOGGER.warning(
+                    "%s history rail unavailable; skipping platform for this run: %s",
+                    config.name,
+                    exc,
+                )
+                return 0
+            raise
 
         rows_text = (
             self._collect_all_crunchyroll_history(page, config, row_selector)
@@ -282,6 +296,261 @@ class SelfHealingRPA:
                     inserted += 1
         LOGGER.info("RPA platform synced: %s, inserted=%s", config.name, inserted)
         return inserted
+
+    def _run_canal_plus_platform(self, page: Page, config: PlatformConfig) -> int:
+        if not self._open_canal_recently_watched(page, config):
+            LOGGER.warning("canal_plus recently watched view unavailable; skipping")
+            return 0
+
+        row_selector = config.selectors["history_rows"]
+        try:
+            page.wait_for_selector(row_selector, timeout=15_000)
+        except PlaywrightTimeoutError:
+            LOGGER.warning("canal_plus recently watched rows unavailable; skipping")
+            return 0
+
+        rows_text = self._collect_canal_plus_history(page, config, row_selector)
+        self.db.record_history_cards(config.name, rows_text)
+        items, unknown_rows = self._extract_structured_cards(rows_text, config.name)
+        if unknown_rows:
+            LOGGER.warning(
+                "canal_plus ignored %s unreadable recently watched cards",
+                len(unknown_rows),
+            )
+
+        inserted = 0
+        for item in items:
+            item.setdefault("platform", config.name)
+            if item.get("serie_title") and self.db.insert_history_item(item):
+                inserted += 1
+        LOGGER.info("RPA platform synced: %s, inserted=%s", config.name, inserted)
+        return inserted
+
+    def _open_canal_recently_watched(
+        self, page: Page, config: PlatformConfig
+    ) -> bool:
+        self._select_canal_profile_if_needed(page, config)
+        if self._click_first_visible(page, config.selectors.get("my_videos")):
+            page.wait_for_load_state("domcontentloaded", timeout=20_000)
+            page.wait_for_timeout(1_500)
+        else:
+            for url in (
+                "https://www.canalplus.com/mes-videos",
+                "https://www.canalplus.com/my-videos",
+            ):
+                page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+                page.wait_for_timeout(1_500)
+                if "404" not in page.title().casefold():
+                    break
+
+        if self._click_first_visible(page, config.selectors.get("recently_watched")):
+            page.wait_for_load_state("domcontentloaded", timeout=20_000)
+            page.wait_for_timeout(1_500)
+            LOGGER.info("canal_plus opened recently watched view: %s", page.url)
+            return True
+
+        if re.search(r"vu-?recemment|recent", page.url, re.I):
+            LOGGER.info("canal_plus already on recently watched view: %s", page.url)
+            return True
+
+        LOGGER.warning("canal_plus could not open recently watched view from %s", page.url)
+        return False
+
+    def _select_canal_profile_if_needed(
+        self, page: Page, config: PlatformConfig
+    ) -> None:
+        title = page.title()
+        body_sample = ""
+        try:
+            body_sample = page.locator("body").inner_text(timeout=2_000)[:500]
+        except Exception:
+            pass
+        if not re.search(r"qui regarde|who'?s watching", f"{title}\n{body_sample}", re.I):
+            return
+        if config.profile_name and self._click_visible_by_text(
+            page, config.selectors.get("profile"), config.profile_name
+        ):
+            page.wait_for_load_state("domcontentloaded", timeout=20_000)
+            page.wait_for_timeout(2_000)
+            LOGGER.info(
+                "canal_plus selected profile '%s'; url=%s title=%s",
+                config.profile_name,
+                page.url,
+                page.title(),
+            )
+            return
+        if self._click_first_visible(page, config.selectors.get("profile")):
+            page.wait_for_load_state("domcontentloaded", timeout=20_000)
+            page.wait_for_timeout(2_000)
+            LOGGER.info("canal_plus selected profile; url=%s title=%s", page.url, page.title())
+            return
+        LOGGER.warning("canal_plus profile selector is visible but no profile could be clicked")
+
+    @staticmethod
+    def _click_visible_by_text(page: Page, selector: str | None, text: str) -> bool:
+        if not selector:
+            return False
+        locators = page.locator(selector).filter(has_text=re.compile(re.escape(text), re.I))
+        try:
+            count = min(locators.count(), 10)
+        except Exception:
+            return False
+        for index in range(count):
+            candidate = locators.nth(index)
+            try:
+                if candidate.is_visible(timeout=800) and candidate.is_enabled(timeout=800):
+                    candidate.scroll_into_view_if_needed(timeout=2_000)
+                    candidate.click(timeout=5_000)
+                    return True
+            except Exception:
+                continue
+        return False
+
+    @staticmethod
+    def _click_first_visible(page: Page, selector: str | None) -> bool:
+        if not selector:
+            return False
+        locators = page.locator(selector)
+        try:
+            count = min(locators.count(), 10)
+        except Exception:
+            return False
+        for index in range(count):
+            candidate = locators.nth(index)
+            try:
+                text = candidate.inner_text(timeout=500).strip()
+                if re.search(r"ajouter|g[eé]rer|modifier|manage|add", text, re.I):
+                    continue
+                if candidate.is_visible(timeout=800) and candidate.is_enabled(timeout=800):
+                    candidate.scroll_into_view_if_needed(timeout=2_000)
+                    candidate.click(timeout=5_000)
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def _collect_canal_plus_history(
+        self, page: Page, config: PlatformConfig, selector: str
+    ) -> list[str]:
+        cards_by_key: dict[tuple, str] = {}
+        stable = 0
+        for step in range(config.max_scroll_steps):
+            before = len(cards_by_key)
+            for row in self._collect_history_rows(page, selector):
+                card = json.loads(row)
+                key = (
+                    card.get("episode_url"),
+                    card.get("title"),
+                    card.get("text"),
+                )
+                cards_by_key[key] = row
+            clicked = self._click_show_more(
+                page,
+                config,
+                config.selectors.get("show_more"),
+                selector,
+                len(cards_by_key),
+            )
+            page.evaluate(
+                """() => window.scrollBy(0, Math.max(300, window.innerHeight * 0.75))"""
+            )
+            page.wait_for_timeout(config.scroll_wait_ms)
+            stable = stable + 1 if not clicked and len(cards_by_key) == before else 0
+            if stable >= 3:
+                break
+            if step % 10 == 0:
+                LOGGER.info(
+                    "canal_plus recently watched scroll=%s cards=%s",
+                    step,
+                    len(cards_by_key),
+                )
+        cards = list(cards_by_key.values())
+        enriched: dict[tuple, str] = {}
+        known_cards = (
+            self.db.known_history_cards(config.name, cards)
+            if self.rpa_mode == "differential" and self.db is not None
+            else set()
+        )
+        consecutive_known = 0
+        for raw_card in cards[: config.max_scroll_steps]:
+            if raw_card in known_cards:
+                consecutive_known += 1
+                if (
+                    self.rpa_mode == "differential"
+                    and consecutive_known >= self.differential_known_threshold
+                ):
+                    LOGGER.info(
+                        "canal_plus differential stop: %s consecutive known cards",
+                        consecutive_known,
+                    )
+                    break
+                if self.rpa_mode == "differential":
+                    continue
+            else:
+                consecutive_known = 0
+            card = json.loads(raw_card)
+            detail_url = card.get("episode_url") or card.get("series_url")
+            detail = self._inspect_canal_plus_detail(page, detail_url)
+            card.update(detail)
+            identity = (
+                card.get("episode_url"),
+                card.get("title"),
+                card.get("episode_text"),
+                card.get("play_state"),
+            )
+            enriched[identity] = json.dumps(card, ensure_ascii=False, sort_keys=True)
+        LOGGER.info("canal_plus collected %s recently watched titles", len(enriched))
+        return list(enriched.values())
+
+    def _inspect_canal_plus_detail(
+        self, source_page: Page, detail_url: str | None
+    ) -> dict[str, Any]:
+        if not detail_url:
+            return {}
+        url = urljoin(source_page.url, detail_url)
+        detail_page = source_page.context.new_page()
+        try:
+            detail_page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+            detail_page.wait_for_timeout(1_500)
+            return detail_page.evaluate(
+                r"""() => {
+                    const text = document.body?.innerText || "";
+                    const buttons = [...document.querySelectorAll("button, a")]
+                        .map(node => node.innerText?.trim())
+                        .filter(Boolean);
+                    const action = buttons.find(value =>
+                        /reprendre la lecture|lecture|play|resume/i.test(value)
+                    ) || "";
+                    const episodeText = [
+                        ...text.matchAll(/\b(?:Saison|Season)\s*\d+\s*(?:[•:\-]\s*)?(?:Épisode|Episode|E)\s*\d+[^\n]*/gi),
+                        ...text.matchAll(/\bS\d+\s*:?\s*E\d+[^\n]*/gi)
+                    ][0]?.[0] || "";
+                    let playState = null;
+                    if (/reprendre la lecture|resume/i.test(action)) playState = "in_progress";
+                    else if (/^lecture$|^play$/i.test(action)) playState = "completed";
+                    return {
+                        detail_text: text.slice(0, 1200),
+                        detail_action: action,
+                        episode_text: episodeText,
+                        play_state: playState,
+                        episode_url: location.href
+                    };
+                }"""
+            )
+        except Exception:
+            LOGGER.debug("Unable to inspect CANAL+ detail: %s", url, exc_info=True)
+            return {"episode_url": url}
+        finally:
+            detail_page.close()
+
+    @staticmethod
+    def _history_unavailable_is_nonfatal(config: PlatformConfig) -> bool:
+        """Some services only expose a volatile continue-watching rail.
+
+        When that rail is absent there is no reliable history to extract, but
+        the rest of the ingestion should continue cleanly.
+        """
+        return config.name in {"canal_plus", "disney_plus"}
 
     def _collect_all_history(self, page, config, selector, container) -> list[str]:
         collected = {}
@@ -867,6 +1136,8 @@ DOM:
                 progress_percent=card.get("progress_percent"),
                 confidence=1.0,
             )
+            if card.get("play_state"):
+                item["status"] = card["play_state"]
             if re.search(r"[eé]pisode suivant|next episode", evidence, re.I):
                 item["episode"] = None
             items.append(item)
