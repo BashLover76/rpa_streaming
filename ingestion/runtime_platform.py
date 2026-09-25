@@ -117,12 +117,9 @@ def _cdp_port(cdp_url: str) -> int:
 
 
 def _start_windows_chrome_from_wsl(port: int, extension_path: Path | None) -> None:
-    extension_args = _windows_extension_args_from_wsl(extension_path)
-    command = (
-        "Start-Process chrome.exe "
-        f"'--remote-debugging-port={port} --remote-allow-origins=\\* "
-        "--user-data-dir=$env:LOCALAPPDATA\\Google\\Chrome\\User Data"
-        f"{extension_args}'"
+    command = _windows_chrome_start_command(
+        port=port,
+        extension_path=_windows_extension_path_from_wsl(extension_path),
     )
     subprocess.run(
         ["powershell.exe", "-NoProfile", "-Command", command],
@@ -133,12 +130,14 @@ def _start_windows_chrome_from_wsl(port: int, extension_path: Path | None) -> No
 
 
 def _start_windows_chrome(port: int, extension_path: Path | None) -> None:
-    extension_args = _extension_args(extension_path)
-    command = (
-        "Start-Process chrome.exe "
-        f"'--remote-debugging-port={port} --remote-allow-origins=* "
-        "--user-data-dir=$env:LOCALAPPDATA\\Google\\Chrome\\User Data"
-        f"{extension_args}'"
+    resolved_extension = None
+    if extension_path:
+        resolved = extension_path.expanduser().resolve()
+        if resolved.exists():
+            resolved_extension = str(resolved)
+    command = _windows_chrome_start_command(
+        port=port,
+        extension_path=resolved_extension,
     )
     subprocess.run(
         ["powershell.exe", "-NoProfile", "-Command", command],
@@ -195,12 +194,38 @@ def _linux_extension_args(extension_path: Path | None) -> list[str]:
     ]
 
 
-def _windows_extension_args_from_wsl(extension_path: Path | None) -> str:
+def _windows_chrome_start_command(
+    *,
+    port: int,
+    extension_path: str | None,
+) -> str:
+    allow_origins = "*"
+    args = [
+        f"'--remote-debugging-port={port}'",
+        f"'--remote-allow-origins={allow_origins}'",
+        '"--user-data-dir=$profileDir"',
+    ]
+    if extension_path:
+        safe_extension_path = extension_path.replace("'", "''")
+        args.extend(
+            [
+                f"'--disable-extensions-except={safe_extension_path}'",
+                f"'--load-extension={safe_extension_path}'",
+            ]
+        )
+    return (
+        "$profileDir = Join-Path $env:LOCALAPPDATA 'Google\\Chrome\\User Data'; "
+        f"$chromeArgs = @({', '.join(args)}); "
+        "Start-Process chrome.exe -ArgumentList $chromeArgs"
+    )
+
+
+def _windows_extension_path_from_wsl(extension_path: Path | None) -> str | None:
     if not extension_path:
-        return ""
+        return None
     resolved = extension_path.expanduser().resolve()
     if not resolved.exists():
-        return ""
+        return None
     try:
         completed = subprocess.run(
             ["wslpath", "-w", str(resolved)],
@@ -211,7 +236,7 @@ def _windows_extension_args_from_wsl(extension_path: Path | None) -> str:
         windows_path = completed.stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         windows_path = str(resolved)
-    return f" --disable-extensions-except={windows_path} --load-extension={windows_path}"
+    return windows_path
 
 
 @contextlib.contextmanager
