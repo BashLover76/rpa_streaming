@@ -33,6 +33,7 @@ class Settings:
     crunchyroll_profile_id: str
     crunchyroll_locale: str
     rpa_credentials: dict[str, dict[str, str]]
+    rpa_profile_names: dict[str, str]
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -75,6 +76,17 @@ class Settings:
                 "password": os.getenv("OCS_PASSWORD", ""),
             },
         }
+        profile_names = {
+            "netflix": os.getenv("NETFLIX_PROFILE_NAME", ""),
+            "prime_video": os.getenv("PRIME_VIDEO_PROFILE_NAME", ""),
+            "disney_plus": os.getenv("DISNEY_PLUS_PROFILE_NAME", ""),
+            "canal_plus": os.getenv("CANAL_PLUS_PROFILE_NAME", ""),
+            "apple_tv_plus": os.getenv("APPLE_TV_PROFILE_NAME", ""),
+            "max": os.getenv("MAX_PROFILE_NAME", ""),
+            "paramount_plus": os.getenv("PARAMOUNT_PLUS_PROFILE_NAME", ""),
+            "ocs": os.getenv("OCS_PROFILE_NAME", ""),
+            "crunchyroll": os.getenv("CRUNCHYROLL_PROFILE_NAME", ""),
+        }
         return cls(
             betaseries_api_key=os.getenv("BETASERIES_API_KEY", ""),
             betaseries_client_secret=os.getenv(
@@ -105,4 +117,5 @@ class Settings:
             crunchyroll_profile_id=os.getenv("CRUNCHYROLL_PROFILE_ID", ""),
             crunchyroll_locale=os.getenv("CRUNCHYROLL_LOCALE", "fr-FR"),
             rpa_credentials=credentials,
+            rpa_profile_names=profile_names,
         )

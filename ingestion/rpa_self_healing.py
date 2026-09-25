@@ -378,8 +378,7 @@ class SelfHealingRPA:
             page.wait_for_load_state("domcontentloaded", timeout=20_000)
             page.wait_for_timeout(2_000)
             LOGGER.info(
-                "canal_plus selected profile '%s'; url=%s title=%s",
-                config.profile_name,
+                "canal_plus selected configured profile; url=%s title=%s",
                 page.url,
                 page.title(),
             )

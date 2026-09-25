@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from ingestion.runtime_platform import (
+    _windows_chrome_start_command,
     chrome_cdp_ready,
     detect_runtime_platform,
     start_chrome_cdp,
@@ -102,6 +103,23 @@ class ChromeCDPStartupTests(unittest.TestCase):
         resolved = str(extension_path.resolve())
         self.assertIn(f"--disable-extensions-except={resolved}", launch_args)
         self.assertIn(f"--load-extension={resolved}", launch_args)
+
+    def test_windows_chrome_command_expands_local_app_data_profile(self) -> None:
+        command = _windows_chrome_start_command(
+            port=9222,
+            extension_path="C:\\extensions\\streaming-rpa-helper",
+        )
+
+        self.assertIn(
+            "$profileDir = Join-Path $env:LOCALAPPDATA 'Google\\Chrome\\User Data'",
+            command,
+        )
+        self.assertIn('"--user-data-dir=$profileDir"', command)
+        self.assertNotIn("--user-data-dir=$env:LOCALAPPDATA", command)
+        self.assertIn("'--remote-allow-origins=*'", command)
+        self.assertIn(
+            "'--load-extension=C:\\extensions\\streaming-rpa-helper'", command
+        )
 
     def test_detects_windows_linux_and_wsl(self) -> None:
         with (

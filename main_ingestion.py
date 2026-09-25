@@ -176,6 +176,9 @@ def run(args: argparse.Namespace) -> None:
                 raise SystemExit(f"Unknown platform: {args.platform}")
         for platform_config in platform_configs:
             platform_config.content_type = args.content_type
+            profile_name = settings.rpa_profile_names.get(platform_config.name, "")
+            if profile_name.strip():
+                platform_config.profile_name = profile_name.strip()
         cdp_url = args.cdp_url or settings.rpa_cdp_url or None
         cdp_timeout_ms = args.cdp_timeout_ms or settings.rpa_cdp_timeout_ms
         if cdp_url and not args.no_auto_start_chrome:
