@@ -1,18 +1,18 @@
 {% extends "base.html" %}
-{% block title %}Calendrier des sorties{% endblock %}
+{% block title %}{{ t("calendar") }}{% endblock %}
 {% block content %}
 <section class="calendar-heading calendar-title-row">
-  <h1>Séries par calendrier</h1>
-  <div class="calendar-totals"><strong>{{ month_series_count }}</strong> Séries <strong>{{ episode_count }}</strong> Épisodes <span class="sr-only">{{ episode_count }} sortie{% if episode_count != 1 %}s{% endif %}</span></div>
+  <h1>{{ t("calendar_title") }}</h1>
+  <div class="calendar-totals"><strong>{{ month_series_count }}</strong> {{ t("calendar_series") }} <strong>{{ episode_count }}</strong> {{ t("calendar_episodes") }} <span class="sr-only">{{ episode_count }} sortie{% if episode_count != 1 %}s{% endif %}</span></div>
 </section>
 
 <form method="get" class="filters calendar-filters" data-ajax-calendar>
-    <div class="calendar-search-control"><input id="calendar-search" type="search" name="q" value="{{ calendar_query }}" placeholder="Rechercher une série"><button class="search-submit" type="submit" aria-label="Rechercher">GO</button></div>
-    <div class="calendar-extra-filters"><select id="calendar-genre" name="genre"><option value="">Tous les genres</option>{% for genre in genres %}<option value="{{ genre }}" {% if calendar_genre == genre %}selected{% endif %}>{{ genre }}</option>{% endfor %}</select><select id="watched-filter" name="watched"><option value="all" {% if watched_filter == 'all' %}selected{% endif %}>Tous</option><option value="watched" {% if watched_filter == 'watched' %}selected{% endif %}>Vus</option><option value="unwatched" {% if watched_filter == 'unwatched' %}selected{% endif %}>Non vus</option></select></div>
-    <div class="calendar-month-control"><label for="calendar-month">Sélection mois</label><input id="calendar-month" type="text" name="month" value="{{ month.strftime('%Y-%m') }}" inputmode="numeric" pattern="[0-9]{4}-[0-9]{2}" maxlength="7" placeholder="AAAA-MM" required></div>
-    <fieldset class="calendar-platforms"><legend>Plateformes</legend>
+    <div class="calendar-search-control"><input id="calendar-search" type="search" name="q" value="{{ calendar_query }}" placeholder="{{ t('search_series') }}"><button class="search-submit" type="submit" aria-label="{{ t('search') }}">{{ t("go") }}</button></div>
+    <div class="calendar-extra-filters"><select id="calendar-genre" name="genre"><option value="">{{ t("all_genres") }}</option>{% for genre in genres %}<option value="{{ genre }}" {% if calendar_genre == genre %}selected{% endif %}>{{ genre }}</option>{% endfor %}</select><select id="watched-filter" name="watched"><option value="all" {% if watched_filter == 'all' %}selected{% endif %}>{{ t("all") }}</option><option value="watched" {% if watched_filter == 'watched' %}selected{% endif %}>{{ t("watched") }}</option><option value="unwatched" {% if watched_filter == 'unwatched' %}selected{% endif %}>{{ t("unwatched") }}</option></select></div>
+    <div class="calendar-month-control"><label for="calendar-month">{{ t("select_month") }}</label><input id="calendar-month" type="text" name="month" value="{{ month.strftime('%Y-%m') }}" inputmode="numeric" pattern="[0-9]{4}-[0-9]{2}" maxlength="7" placeholder="YYYY-MM" required></div>
+    <fieldset class="calendar-platforms"><legend>{{ t("platforms") }}</legend>
       {% for item in platforms %}
-      <button type="button" class="platform-filter{% if item.platform in selected_platforms %} is-selected{% endif %}" data-platform="{{ item.platform }}" aria-pressed="{{ 'true' if item.platform in selected_platforms else 'false' }}"><span class="platform-mark platform-{{ item.platform }}">{{ platform_labels.get(item.platform, item.platform) }} · {{ item.series_total }} séries / {{ item.episode_total }} épisodes</span></button>
+      <button type="button" class="platform-filter{% if item.platform in selected_platforms %} is-selected{% endif %}" data-platform="{{ item.platform }}" aria-pressed="{{ 'true' if item.platform in selected_platforms else 'false' }}"><span class="platform-mark platform-{{ item.platform }}">{{ platform_labels.get(item.platform, item.platform) }} · {{ item.series_total }} {{ t("calendar_series") }} / {{ item.episode_total }} {{ t("calendar_episodes") }}</span></button>
       {% endfor %}
     </fieldset>
 </form>
@@ -21,13 +21,13 @@
   <h2>{{ month_label }}</h2>
   <nav aria-label="Navigation du calendrier">
     <a class="calendar-arrow" href="{{ url_for('calendar_view', month=previous_month, platform=selected_platforms, watched=watched_filter, q=calendar_query, genre=calendar_genre) }}" title="Mois précédent" aria-label="Mois précédent">&#8592;</a>
-    <a href="{{ url_for('calendar_view', month=today.strftime('%Y-%m'), platform=selected_platforms, watched=watched_filter, q=calendar_query, genre=calendar_genre) }}">Ce mois-ci</a>
+    <a href="{{ url_for('calendar_view', month=today.strftime('%Y-%m'), platform=selected_platforms, watched=watched_filter, q=calendar_query, genre=calendar_genre) }}">{{ t("current_month") }}</a>
     <a class="calendar-arrow" href="{{ url_for('calendar_view', month=next_month, platform=selected_platforms, watched=watched_filter, q=calendar_query, genre=calendar_genre) }}" title="Mois suivant" aria-label="Mois suivant">&#8594;</a>
   </nav>
 </div>
 
 {% if not episode_count %}
-<p class="empty calendar-empty" role="status">Aucune sortie connue pour ce mois et ces filtres.</p>
+<p class="empty calendar-empty" role="status">{{ t("calendar_empty") }}</p>
 {% endif %}
 <section class="release-calendar" aria-label="Sorties de {{ month_label }}">
   {% for weekday in ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'] %}

@@ -104,3 +104,95 @@
     });
   });
 })();
+
+(() => {
+  const live = document.querySelector(".admin-rpa-live");
+  if (!live) return;
+  const stateUrl = live.dataset.rpaStateUrl;
+  const currentNode = document.querySelector("[data-rpa-current]");
+  const queueNode = document.querySelector("[data-rpa-queue]");
+  const logsNode = document.querySelector("[data-rpa-logs]");
+  const refreshNode = document.querySelector("[data-rpa-refresh]");
+  if (!stateUrl || !currentNode || !queueNode || !logsNode) return;
+
+  const text = (value) => value == null || value === "" ? "?" : String(value);
+  const mark = (platform, label) =>
+    `<b class="platform-mark platform-${escapeHtml(platform || "unknown")}">${escapeHtml(label || platform || "?")}</b>`;
+
+  const renderCurrent = (current) => {
+    if (!current) {
+      currentNode.innerHTML = `<p class="empty">Aucune ingestion RPA en cours.</p>`;
+      return;
+    }
+    currentNode.innerHTML = `
+      <article class="admin-rpa-current" data-current-log="${escapeHtml(current.log_name || "")}">
+        <div>
+          <span class="platform-label">${mark(current.platform, current.label)}</span>
+          <p class="muted">Démarré : ${escapeHtml(text(current.started_at))} · Log : ${escapeHtml(text(current.log_name))}</p>
+        </div>
+        <pre>${escapeHtml(current.log_tail || "En attente des premières lignes de log...")}</pre>
+      </article>
+    `;
+    const pre = currentNode.querySelector("pre");
+    if (pre) pre.scrollTop = pre.scrollHeight;
+  };
+
+  const renderQueue = (queue) => {
+    if (!queue || queue.length === 0) {
+      queueNode.innerHTML = `<p class="empty">Aucun job en attente.</p>`;
+      return;
+    }
+    queueNode.innerHTML = queue.map((job) => `
+      <article class="admin-row">
+        <div>
+          <span class="platform-label">${mark(job.platform, job.label)}</span>
+          <span>Demandé : ${escapeHtml(text(job.created_at))}</span>
+        </div>
+        <div class="row-meta"><span>${escapeHtml(text(job.log_name))}</span></div>
+      </article>
+    `).join("");
+  };
+
+  const renderLogs = (logs) => {
+    if (!logs || logs.length === 0) {
+      logsNode.innerHTML = `<p class="empty">Aucun log RPA admin trouvé.</p>`;
+      return;
+    }
+    logsNode.innerHTML = logs.map((log) => `
+      <article>
+        <h3>${escapeHtml(text(log.name))}</h3>
+        <p class="muted">Dernière mise à jour : ${escapeHtml(text(log.updated_at))}</p>
+        <pre>${escapeHtml(log.content || "")}</pre>
+      </article>
+    `).join("");
+  };
+
+  const refresh = async () => {
+    try {
+      const response = await fetch(stateUrl, { headers: { "Accept": "application/json" } });
+      if (!response.ok) return;
+      const state = await response.json();
+      renderCurrent(state.current);
+      renderQueue(state.queue);
+      renderLogs(state.recent_logs);
+      if (refreshNode) {
+        refreshNode.textContent = `Rafraîchi à ${new Date().toLocaleTimeString()} · mise à jour toutes les 5s`;
+      }
+    } catch (_error) {
+      if (refreshNode) refreshNode.textContent = "Rafraîchissement automatique indisponible.";
+    }
+  };
+
+  refresh();
+  window.setInterval(refresh, 5000);
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (character) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    })[character]);
+  }
+})();

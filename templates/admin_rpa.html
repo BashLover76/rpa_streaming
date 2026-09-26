@@ -27,10 +27,11 @@
   </div>
 </section>
 
-<section class="admin-section">
+<section class="admin-section admin-rpa-live" data-rpa-state-url="{{ url_for('admin_rpa_state_api') }}">
   <h2>Process en cours</h2>
+  <div data-rpa-current>
   {% if rpa_state.current %}
-    <article class="admin-rpa-current">
+    <article class="admin-rpa-current" data-current-log="{{ rpa_state.current.log_name }}">
       <div>
         <span class="platform-label"><b class="platform-mark platform-{{ rpa_state.current.platform }}">{{ rpa_state.current.label }}</b></span>
         <p class="muted">Démarré : {{ rpa_state.current.started_at }} · Log : {{ rpa_state.current.log_name }}</p>
@@ -40,11 +41,12 @@
   {% else %}
     <p class="empty">Aucune ingestion RPA en cours.</p>
   {% endif %}
+  </div>
 </section>
 
 <section class="admin-section">
   <h2>File d’attente</h2>
-  <div class="admin-list">
+  <div class="admin-list" data-rpa-queue>
   {% for job in rpa_state.queue %}
     <article class="admin-row">
       <div>
@@ -61,7 +63,8 @@
 
 <section class="admin-section">
   <h2>Derniers logs RPA admin</h2>
-  <div class="admin-logs">
+  <p class="muted" data-rpa-refresh>Rafraîchissement automatique toutes les 5s.</p>
+  <div class="admin-logs" data-rpa-logs>
   {% for log in rpa_state.recent_logs %}
     <article>
       <h3>{{ log.name }}</h3>
