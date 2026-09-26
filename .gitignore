@@ -13,3 +13,4 @@ android-sdk/
 android/local.properties
 android/.gradle/
 android/**/build/
+.continue/ingestion.lock
