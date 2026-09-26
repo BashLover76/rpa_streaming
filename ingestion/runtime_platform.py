@@ -20,6 +20,7 @@ class RuntimePlatform:
     is_windows: bool
     is_linux: bool
     is_wsl: bool
+    is_docker: bool
 
 
 def detect_runtime_platform() -> RuntimePlatform:
@@ -36,6 +37,7 @@ def detect_runtime_platform() -> RuntimePlatform:
         is_windows=system == "windows",
         is_linux=system == "linux",
         is_wsl=is_wsl,
+        is_docker=Path("/.dockerenv").exists(),
     )
 
 
@@ -161,6 +163,7 @@ def _start_linux_chrome(port: int, extension_path: Path | None) -> None:
     args = [
         executable,
         f"--remote-debugging-port={port}",
+        "--remote-debugging-address=0.0.0.0",
         "--remote-allow-origins=*",
         f"--user-data-dir={profile_dir}",
     ]
@@ -202,6 +205,7 @@ def _windows_chrome_start_command(
     allow_origins = "*"
     args = [
         f"'--remote-debugging-port={port}'",
+        "'--remote-debugging-address=0.0.0.0'",
         f"'--remote-allow-origins={allow_origins}'",
         '"--user-data-dir=$profileDir"',
     ]

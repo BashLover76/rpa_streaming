@@ -1,0 +1,32 @@
+services:
+  streaming-web:
+    image: ${STREAMING_WEB_IMAGE:-rpa-streaming-web}:${STREAMING_WEB_TAG:-0.3.0}
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: streaming-web
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${WEB_PORT:-5000}:5000"
+    environment:
+      STREAMING_DB_PATH: /data/streaming.db
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      ADMIN_RPA_RUNNER: docker
+      ADMIN_RPA_COMPOSE_FILE: /app/docker-compose.rpa.yml
+      ADMIN_RPA_DOCKER_SERVICE: rpa-job
+      RPA_CDP_URL: ${RPA_CDP_URL_DOCKER:-http://host.docker.internal:9222}
+    volumes:
+      - streaming-web-data:/data
+      - streaming-web-state:/app/.continue
+      - streaming-web-logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  streaming-web-data:
+    name: rpa_streaming_streaming-web-data
+  streaming-web-state:
+  streaming-web-logs:

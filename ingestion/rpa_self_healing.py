@@ -169,7 +169,9 @@ class SelfHealingRPA:
         self._preflight_cdp_endpoint()
         try:
             browser = playwright.chromium.connect_over_cdp(
-                self.cdp_url, timeout=self.cdp_timeout_ms
+                self.cdp_url,
+                timeout=self.cdp_timeout_ms,
+                headers=_cdp_headers(self.cdp_url),
             )
         except Exception as exc:
             raise CDPConnectionError(_cdp_recovery_message(self.cdp_url)) from exc
@@ -213,7 +215,10 @@ class SelfHealingRPA:
             return
         version_url = urljoin(self.cdp_url.rstrip("/") + "/", "json/version")
         try:
-            request = Request(version_url, headers={"Accept": "application/json"})
+            request = Request(
+                version_url,
+                headers={"Accept": "application/json", **_cdp_headers(self.cdp_url)},
+            )
             with urlopen(request, timeout=5) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except Exception as exc:
@@ -824,6 +829,9 @@ class SelfHealingRPA:
         password = credentials.get("password", "")
         if not email or not password:
             return
+        if config.name == "crunchyroll" and self._crunchyroll_history_loaded(page):
+            LOGGER.info("%s history is already available; skipping RPA login.", config.name)
+            return
         if self._selector_is_visible(page, config.selectors.get("logged_in_indicator")):
             LOGGER.info("%s already authenticated; skipping RPA login.", config.name)
             return
@@ -877,6 +885,18 @@ class SelfHealingRPA:
         try:
             page.locator(selector).first.wait_for(state="visible", timeout=timeout_ms)
             return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def _crunchyroll_history_loaded(page: Page) -> bool:
+        try:
+            if "/history" not in page.url:
+                return False
+            return (
+                page.locator(".history-body").count() > 0
+                or page.locator("a[href*='/watch/']").count() > 0
+            )
         except Exception:
             return False
 
@@ -1366,6 +1386,16 @@ def _cdp_recovery_message(cdp_url: str | None) -> str:
         '"--user-data-dir=$profileDir" via Start-Process -ArgumentList. '
         f"Check from WSL with: curl {endpoint}/json/version"
     )
+
+
+def _cdp_headers(cdp_url: str | None) -> dict[str, str]:
+    if not cdp_url:
+        return {}
+    parsed = urlsplit(cdp_url)
+    if parsed.hostname != "host.docker.internal":
+        return {}
+    port = parsed.port or 9222
+    return {"Host": f"127.0.0.1:{port}"}
 
 
 def _looks_like_selector(selector: str) -> bool:

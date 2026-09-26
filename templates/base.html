@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr">
+<html lang="{{ current_lang }}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -11,11 +11,16 @@
     <header class="topbar">
       <a class="brand" href="{{ url_for('index') }}">Streaming DB</a>
       <nav>
-        <a href="{{ url_for('index') }}">Séries</a>
-        <a href="{{ url_for('movies_view') }}" {% if request.endpoint == 'movies_view' %}aria-current="page"{% endif %}>Films</a>
-        <a href="{{ url_for('calendar_view') }}" {% if request.endpoint == 'calendar_view' %}aria-current="page"{% endif %}>Calendrier</a>
-        <a href="{{ url_for('admin_view') }}" {% if request.endpoint == 'admin_view' %}aria-current="page"{% endif %}>Admin</a>
+        <a href="{{ url_for('index') }}">{{ t("series") }}</a>
+        <a href="{{ url_for('movies_view') }}" {% if request.endpoint == 'movies_view' %}aria-current="page"{% endif %}>{{ t("movies") }}</a>
+        <a href="{{ url_for('calendar_view') }}" {% if request.endpoint == 'calendar_view' %}aria-current="page"{% endif %}>{{ t("calendar") }}</a>
+        <a href="{{ url_for('admin_view') }}" {% if request.endpoint == 'admin_view' %}aria-current="page"{% endif %}>{{ t("admin") }}</a>
       </nav>
+      <div class="language-switcher" aria-label="{{ t('language') }}">
+        {% for code, option in language_options.items() %}
+        <a href="{{ language_url(code) }}" title="{{ option.label }}" aria-label="{{ option.label }}" {% if current_lang == code %}aria-current="true"{% endif %}>{{ option.flag }}</a>
+        {% endfor %}
+      </div>
     </header>
     <main class="page{% block main_class %}{% endblock %}"{% block main_style %}{% endblock %}>
       {% block content %}{% endblock %}

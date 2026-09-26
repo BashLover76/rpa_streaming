@@ -1,0 +1,27 @@
+FROM python:3.14-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    STREAMING_DB_PATH=/data/streaming.db \
+    RPA_CDP_URL=http://host.docker.internal:9222
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates socat \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY config ./config
+COPY browser_extension ./browser_extension
+COPY ingestion ./ingestion
+COPY tools ./tools
+COPY main_ingestion.py .
+
+RUN mkdir -p /data .continue logs artifacts backups \
+    && chmod +x /app/tools/docker_rpa_entrypoint.sh
+
+ENTRYPOINT ["/app/tools/docker_rpa_entrypoint.sh"]
+CMD ["python", "main_ingestion.py", "--cdp-url", "http://host.docker.internal:9222"]
