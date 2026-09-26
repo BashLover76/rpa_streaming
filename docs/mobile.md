@@ -19,7 +19,7 @@ python tools/sync_db_to_web_container.py --restart
 2. Depuis le téléphone, vérifie que le serveur local est joignable sur le réseau local :
 
 ```text
-http://ADRESSE_IP_DU_serveur local:5000/api/mobile/bootstrap
+http://ADRESSE_IP_DU_SERVEUR_LOCAL:5000/api/mobile/bootstrap
 ```
 
 Sous Windows/WSL, il peut être nécessaire d'autoriser explicitement le port
