@@ -10,8 +10,8 @@ pour les cartes non structurees et la reparation de selecteurs ; les cartes
 lisibles sont extraites directement du DOM.
 
 ```bash
-# Depuis PowerShell Windows ou WSL : lancer Chrome Windows en mode CDP
-powershell.exe -NoProfile -Command "Start-Process chrome.exe '--remote-debugging-port=9222 --remote-allow-origins=\* --user-data-dir=$env:LOCALAPPDATA\Google\Chrome\User Data'"
+# Depuis WSL : laisser le script relancer Chrome Windows avec CDP + extension
+python main_ingestion.py --cdp-url http://127.0.0.1:9222 --force-restart-chrome
 
 # Depuis Linux natif si tu veux lancer Chrome manuellement
 google-chrome --remote-debugging-port=9222 --remote-allow-origins='*' --user-data-dir="$HOME/.config/rpa-streaming-chrome" >/dev/null 2>&1 &
@@ -156,14 +156,24 @@ Ferme d'abord toutes les fenetres Chrome Windows, puis lance PowerShell :
 
 ```powershell
 $chrome = "$env:ProgramFiles\Google\Chrome\Application\chrome.exe"
-Start-Process $chrome -ArgumentList '--remote-debugging-port=9222','--remote-allow-origins=*'
+$profileDir = Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data'
+Start-Process $chrome -ArgumentList @(
+  '--remote-debugging-port=9222',
+  '--remote-allow-origins=*',
+  "--user-data-dir=$profileDir"
+)
 ```
 
 Si Chrome est installe dans le dossier utilisateur :
 
 ```powershell
 $chrome = "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
-Start-Process $chrome -ArgumentList '--remote-debugging-port=9222','--remote-allow-origins=*'
+$profileDir = Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data'
+Start-Process $chrome -ArgumentList @(
+  '--remote-debugging-port=9222',
+  '--remote-allow-origins=*',
+  "--user-data-dir=$profileDir"
+)
 ```
 
 Reconnecte-toi ensuite aux plateformes dans cette fenetre Chrome. Depuis WSL,
@@ -373,7 +383,12 @@ Le flux recommandé est maintenant le plus automatique possible:
 Commande Windows/WSL validée pour démarrer Chrome manuellement en CDP:
 
 ```powershell
-powershell.exe -NoProfile -Command "Start-Process chrome.exe '--remote-debugging-port=9222 --remote-allow-origins=* --user-data-dir=$env:LOCALAPPDATA\Google\Chrome\User Data'"
+$profileDir = Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data'
+Start-Process chrome.exe -ArgumentList @(
+  '--remote-debugging-port=9222',
+  '--remote-allow-origins=*',
+  "--user-data-dir=$profileDir"
+)
 ```
 
 Si Chrome est déjà ouvert sans `--remote-debugging-port`, le script propose de le fermer et de le relancer avec CDP + extension. Pour accepter automatiquement, utilise `--force-restart-chrome`. Une extension Chrome ne peut pas être injectée dans une session CDP déjà ouverte; elle est chargée automatiquement uniquement au lancement de Chrome.
