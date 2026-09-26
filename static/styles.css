@@ -50,6 +50,29 @@ a {
 .topbar nav { display: flex; gap: 20px; }
 .topbar nav a[aria-current="page"] { color: var(--text); }
 
+.language-switcher {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.language-switcher a {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 18px;
+}
+
+.language-switcher a[aria-current="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
 .calendar-heading, .calendar-toolbar, .calendar-toolbar nav {
   display: flex;
   align-items: center;

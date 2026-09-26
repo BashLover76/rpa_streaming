@@ -16,6 +16,7 @@ from ingestion.ollama_client import OllamaClient
 from ingestion.rpa_self_healing import SelfHealingRPA, load_platform_configs
 from ingestion.runtime_platform import (
     chrome_cdp_ready,
+    detect_runtime_platform,
     portable_file_lock,
     start_chrome_cdp,
     terminate_chrome_processes,
@@ -234,7 +235,16 @@ def ensure_chrome_cdp(
 ) -> None:
     """Start Chrome for Playwright CDP when the endpoint is down."""
     logger = logging.getLogger(__name__)
+    runtime = detect_runtime_platform()
     if chrome_cdp_ready(cdp_url):
+        return
+    if runtime.is_docker:
+        logger.warning(
+            "Chrome CDP is not reachable from this Docker container at %s. "
+            "Start Chrome on the host with --remote-debugging-port and "
+            "--remote-debugging-address=0.0.0.0, or pass --no-auto-start-chrome.",
+            cdp_url,
+        )
         return
 
     logger.warning("Chrome CDP is not reachable at %s; starting Chrome.", cdp_url)
@@ -281,6 +291,8 @@ def _start_and_wait_for_chrome(
 
 
 def _should_restart_chrome(*, force_restart: bool) -> bool:
+    if detect_runtime_platform().is_docker:
+        return False
     if force_restart:
         return True
     if not sys.stdin.isatty():

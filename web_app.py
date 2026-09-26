@@ -54,6 +54,132 @@ PLATFORM_MARKS = {
     "unknown": "BS",
 }
 
+SUPPORTED_LANGUAGES = {
+    "fr": {"flag": "🇫🇷", "label": "Français"},
+    "en": {"flag": "🇬🇧", "label": "English"},
+    "es": {"flag": "🇪🇸", "label": "Español"},
+}
+
+TRANSLATIONS = {
+    "fr": {
+        "admin": "Admin",
+        "all_genres": "Tous les genres",
+        "all_platforms": "Toutes les plateformes",
+        "all": "Tous",
+        "calendar": "Calendrier",
+        "calendar_empty": "Aucune sortie connue pour ce mois et ces filtres.",
+        "calendar_episodes": "Épisodes",
+        "calendar_series": "Séries",
+        "calendar_title": "Séries par calendrier",
+        "current_month": "Ce mois-ci",
+        "dated_history_none": "Aucun visionnage daté",
+        "episodes_seen": "épisodes vus",
+        "go": "GO",
+        "histories": "Historiques",
+        "language": "Langue",
+        "movies": "Films",
+        "movies_empty": "Aucun film ne correspond à cette recherche.",
+        "movies_intro": "Vue locale issue des historiques de streaming, enrichie avec BetaSeries et IMDb.",
+        "movies_title": "Films par plateformes",
+        "next": "Prochain",
+        "no_known_release": "Aucune sortie connue",
+        "page": "Page",
+        "page_size": "Par page",
+        "platforms": "Plateformes",
+        "previous": "Précédent",
+        "search": "Rechercher",
+        "search_movie": "Rechercher un film",
+        "search_series": "Rechercher une série",
+        "select_month": "Sélection mois",
+        "series": "Séries",
+        "series_empty": "Aucune série ne correspond à cette recherche.",
+        "series_intro": "Vue locale issue de SQLite, avec historique et calendrier BetaSeries.",
+        "series_title": "Séries par plateformes",
+        "synced": "Synchros BetaSeries",
+        "today": "Aujourd'hui",
+        "unwatched": "Non vus",
+        "watched": "Vus",
+    },
+    "en": {
+        "admin": "Admin",
+        "all_genres": "All genres",
+        "all_platforms": "All platforms",
+        "all": "All",
+        "calendar": "Calendar",
+        "calendar_empty": "No known releases for this month and filters.",
+        "calendar_episodes": "Episodes",
+        "calendar_series": "Series",
+        "calendar_title": "Series calendar",
+        "current_month": "This month",
+        "dated_history_none": "No dated viewing",
+        "episodes_seen": "episodes watched",
+        "go": "GO",
+        "histories": "History",
+        "language": "Language",
+        "movies": "Movies",
+        "movies_empty": "No movie matches this search.",
+        "movies_intro": "Local view built from streaming histories, enriched with BetaSeries and IMDb.",
+        "movies_title": "Movies by platform",
+        "next": "Next",
+        "no_known_release": "No known release",
+        "page": "Page",
+        "page_size": "Per page",
+        "platforms": "Platforms",
+        "previous": "Previous",
+        "search": "Search",
+        "search_movie": "Search a movie",
+        "search_series": "Search a series",
+        "select_month": "Select month",
+        "series": "Series",
+        "series_empty": "No series matches this search.",
+        "series_intro": "Local SQLite view with viewing history and BetaSeries calendar.",
+        "series_title": "Series by platform",
+        "synced": "BetaSeries syncs",
+        "today": "Today",
+        "unwatched": "Unwatched",
+        "watched": "Watched",
+    },
+    "es": {
+        "admin": "Admin",
+        "all_genres": "Todos los géneros",
+        "all_platforms": "Todas las plataformas",
+        "all": "Todo",
+        "calendar": "Calendario",
+        "calendar_empty": "No hay estrenos conocidos para este mes y estos filtros.",
+        "calendar_episodes": "Episodios",
+        "calendar_series": "Series",
+        "calendar_title": "Series por calendario",
+        "current_month": "Este mes",
+        "dated_history_none": "Sin visionado fechado",
+        "episodes_seen": "episodios vistos",
+        "go": "GO",
+        "histories": "Historiales",
+        "language": "Idioma",
+        "movies": "Películas",
+        "movies_empty": "Ninguna película coincide con esta búsqueda.",
+        "movies_intro": "Vista local basada en historiales de streaming, enriquecida con BetaSeries e IMDb.",
+        "movies_title": "Películas por plataforma",
+        "next": "Próximo",
+        "no_known_release": "Sin estreno conocido",
+        "page": "Página",
+        "page_size": "Por página",
+        "platforms": "Plataformas",
+        "previous": "Anterior",
+        "search": "Buscar",
+        "search_movie": "Buscar una película",
+        "search_series": "Buscar una serie",
+        "select_month": "Seleccionar mes",
+        "series": "Series",
+        "series_empty": "Ninguna serie coincide con esta búsqueda.",
+        "series_intro": "Vista local desde SQLite, con historial y calendario BetaSeries.",
+        "series_title": "Series por plataforma",
+        "synced": "Sincronizaciones BetaSeries",
+        "today": "Hoy",
+        "unwatched": "No vistos",
+        "watched": "Vistos",
+    },
+}
+
 
 def create_app() -> Flask:
     app = Flask(__name__)
@@ -69,6 +195,7 @@ def create_app() -> Flask:
 
     @app.before_request
     def protect_admin_routes():
+        g.lang = resolve_language()
         if not request.path.startswith("/admin"):
             return None
         admin_token = current_app.config["ADMIN_TOKEN"]
@@ -86,6 +213,35 @@ def create_app() -> Flask:
             401,
             {"WWW-Authenticate": 'Basic realm="Streaming DB admin"'},
         )
+
+    @app.after_request
+    def apply_response_policy(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=()",
+        )
+        if request.args.get("lang") in SUPPORTED_LANGUAGES:
+            response.set_cookie(
+                "streaming_lang",
+                request.args["lang"],
+                max_age=60 * 60 * 24 * 365,
+                secure=request.is_secure,
+                httponly=True,
+                samesite="Lax",
+            )
+        return response
+
+    @app.context_processor
+    def inject_i18n_helpers():
+        return {
+            "current_lang": g.get("lang", "fr"),
+            "language_options": SUPPORTED_LANGUAGES,
+            "language_url": language_url,
+            "t": translate,
+        }
 
     @app.get("/")
     def index():
@@ -219,6 +375,10 @@ def create_app() -> Flask:
             rpa_state=fetch_admin_rpa_state(),
             platform_labels=PLATFORM_LABELS,
         )
+
+    @app.get("/admin/rpa/state")
+    def admin_rpa_state_api():
+        return jsonify(fetch_admin_rpa_state())
 
     @app.get("/admin/logs")
     def admin_logs_view():
@@ -377,6 +537,121 @@ def create_app() -> Flask:
     def movie_suggestions():
         return jsonify(suggest_movies(request.args.get("q", "")))
 
+    @app.get("/api/mobile/bootstrap")
+    def api_mobile_bootstrap():
+        return jsonify(
+            {
+                "stats": {
+                    "series": fetch_stats(),
+                    "movies": fetch_movie_stats(),
+                },
+                "platforms": {
+                    "series": fetch_platforms(),
+                    "movies": fetch_movie_platforms(),
+                },
+                "genres": {
+                    "series": fetch_genres(),
+                    "movies": fetch_genres(content_type="movie"),
+                },
+                "platform_labels": PLATFORM_LABELS,
+                "platform_marks": PLATFORM_MARKS,
+            }
+        )
+
+    @app.get("/api/mobile/titles")
+    def api_mobile_titles():
+        content_type = request.args.get("type", "series").strip().casefold()
+        query = request.args.get("q", "").strip()
+        platform = request.args.get("platform", "").strip()
+        genre = request.args.get("genre", "").strip()
+        page, per_page = parse_pagination_args(default_per_page=20, max_per_page=100)
+        if content_type in {"movie", "movies", "film", "films"}:
+            total = count_movies(query, platform, genre)
+            items = [
+                mobile_title_summary(item, content_type="movie")
+                for item in fetch_movies(
+                    query=query,
+                    platform=platform,
+                    genre=genre,
+                    limit=per_page,
+                    offset=(page - 1) * per_page,
+                )
+            ]
+            normalized_type = "movie"
+        else:
+            total = count_series(query, platform, genre)
+            items = [
+                mobile_title_summary(item, content_type="series")
+                for item in search_series(
+                    query=query,
+                    platform=platform,
+                    genre=genre,
+                    limit=per_page,
+                    offset=(page - 1) * per_page,
+                )
+            ]
+            normalized_type = "series"
+        return jsonify(
+            {
+                "type": normalized_type,
+                "items": items,
+                "page": page,
+                "per_page": per_page,
+                "total": total,
+                "total_pages": max(1, (total + per_page - 1) // per_page),
+            }
+        )
+
+    @app.get("/api/mobile/titles/<int:title_id>")
+    def api_mobile_title_detail(title_id: int):
+        serie = fetch_series(title_id)
+        if serie is None:
+            abort(404)
+        history = fetch_history(title_id)
+        full_calendar = fetch_calendar(title_id, only_upcoming=False)
+        upcoming = fetch_calendar(title_id, only_upcoming=True)
+        serie["watched_episode_count"] = count_watched_episodes(history)
+        if has_complete_season_marker(history):
+            serie["watched_episode_count"] = (
+                serie.get("episodes_count") or serie["watched_episode_count"]
+            )
+        serie["genres_list"] = parse_genres(serie.get("genres"))
+        status = infer_status(serie, upcoming, full_calendar)
+        return jsonify(
+            mobile_title_detail(
+                serie=serie,
+                history=history[:50],
+                calendar=full_calendar,
+                upcoming=upcoming,
+                status=status,
+            )
+        )
+
+    @app.get("/api/mobile/calendar")
+    def api_mobile_calendar():
+        selected_month = parse_month(request.args.get("month"))
+        query = request.args.get("q", "").strip()
+        genre = request.args.get("genre", "").strip()
+        watched_filter = request.args.get("watched", "all")
+        platforms = request.args.getlist("platform")
+        episodes = fetch_upcoming_releases(
+            selected_month,
+            date.today(),
+            platforms,
+            watched_filter=watched_filter,
+            query=query,
+            genre=genre,
+        )
+        return jsonify(
+            {
+                "month": selected_month.strftime("%Y-%m"),
+                "platforms": fetch_calendar_platforms(
+                    selected_month, query=query, genre=genre
+                ),
+                "episodes": [mobile_calendar_episode(item) for item in episodes],
+            }
+        )
+
     return app
 
 
@@ -387,6 +662,29 @@ def get_db() -> sqlite3.Connection:
         conn.row_factory = sqlite3.Row
         g.db = conn
     return g.db
+
+
+def resolve_language() -> str:
+    requested = request.args.get("lang") or request.cookies.get("streaming_lang")
+    if requested in SUPPORTED_LANGUAGES:
+        return requested
+    accepted = request.accept_languages.best_match(SUPPORTED_LANGUAGES.keys())
+    return accepted or "fr"
+
+
+def translate(key: str) -> str:
+    lang = g.get("lang", "fr")
+    return TRANSLATIONS.get(lang, TRANSLATIONS["fr"]).get(
+        key,
+        TRANSLATIONS["fr"].get(key, key),
+    )
+
+
+def language_url(lang: str) -> str:
+    args = request.args.to_dict(flat=False)
+    args["lang"] = [lang]
+    route_args = request.view_args or {}
+    return url_for(request.endpoint or "index", **route_args, **args)
 
 
 def fetch_platforms() -> list[dict[str, Any]]:
@@ -1384,6 +1682,181 @@ def count_watched_episodes(history: list[dict[str, Any]]) -> int:
         if key:
             identities.add(key)
     return len(identities)
+
+
+def parse_pagination_args(
+    *, default_per_page: int = 20, max_per_page: int = 100
+) -> tuple[int, int]:
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+        per_page = max(1, int(request.args.get("per_page", default_per_page)))
+    except ValueError:
+        abort(400, description="Paramètre de pagination invalide.")
+    return page, min(per_page, max_per_page)
+
+
+def parse_month(raw_month: str | None) -> date:
+    raw_value = raw_month or date.today().strftime("%Y-%m")
+    try:
+        return datetime.strptime(raw_value, "%Y-%m").date().replace(day=1)
+    except ValueError:
+        abort(400, description="Le mois doit être au format YYYY-MM.")
+
+
+def mobile_title_summary(
+    item: dict[str, Any], *, content_type: str
+) -> dict[str, Any]:
+    platform = item.get("plateforme") or item.get("platform") or "unknown"
+    return {
+        "id": item.get("id"),
+        "type": content_type,
+        "title": item.get("titre"),
+        "platform": platform,
+        "platform_label": PLATFORM_LABELS.get(platform, platform),
+        "poster_url": item.get("poster_url"),
+        "synopsis": item.get("synopsis"),
+        "season_count": item.get("season_count") or item.get("seasons_count"),
+        "episode_count": item.get("total_episode_count")
+        or item.get("episodes_count"),
+        "watched_count": item.get("watched_count") or item.get("history_count"),
+        "next_air_date": item.get("next_air_date"),
+        "last_watched_at": item.get("last_watched_at"),
+        "year": item.get("creation_year"),
+        "rating": item.get("imdb_rating"),
+        "runtime_minutes": item.get("runtime_minutes"),
+        "deep_link_url": fetch_deep_link_url(int(item["id"]), platform=platform),
+    }
+
+
+def mobile_title_detail(
+    *,
+    serie: dict[str, Any],
+    history: list[dict[str, Any]],
+    calendar: list[dict[str, Any]],
+    upcoming: list[dict[str, Any]],
+    status: dict[str, str],
+) -> dict[str, Any]:
+    platform = serie.get("platform") or serie.get("plateforme") or "unknown"
+    content_type = (
+        "movie"
+        if str(serie.get("imdb_kind") or "").casefold() in {"movie", "film"}
+        else "series"
+    )
+    return {
+        "id": serie.get("id"),
+        "type": content_type,
+        "title": serie.get("titre"),
+        "platform": platform,
+        "platforms": serie.get("platforms") or [platform],
+        "platform_label": PLATFORM_LABELS.get(platform, platform),
+        "poster_url": serie.get("poster_url"),
+        "banner_url": serie.get("banner_url"),
+        "synopsis": serie.get("synopsis") or serie.get("imdb_plot"),
+        "genres": serie.get("genres_list") or parse_genres(serie.get("genres")),
+        "season_count": serie.get("seasons_count"),
+        "episode_count": serie.get("episodes_count"),
+        "watched_count": serie.get("watched_episode_count"),
+        "status": status,
+        "betaseries_url": serie.get("betaseries_url"),
+        "imdb_url": serie.get("imdb_url"),
+        "deep_link_url": fetch_deep_link_url(int(serie["id"]), platform=platform),
+        "history": [mobile_history_item(item) for item in history],
+        "upcoming": [mobile_calendar_episode(item) for item in upcoming],
+        "calendar": [mobile_calendar_episode(item) for item in calendar],
+    }
+
+
+def mobile_history_item(item: dict[str, Any]) -> dict[str, Any]:
+    platform = item.get("plateforme_source") or "unknown"
+    return {
+        "id": item.get("id"),
+        "platform": platform,
+        "platform_label": PLATFORM_LABELS.get(platform, platform),
+        "season": item.get("saison"),
+        "episode": item.get("episode"),
+        "episode_title": item.get("display_title") or item.get("episode_title"),
+        "watched_at": item.get("date_vu"),
+        "status": item.get("status"),
+        "progress_percent": item.get("progress_percent"),
+        "deep_link_url": item.get("episode_url")
+        or fetch_platform_fallback_url(platform, item.get("serie_title")),
+    }
+
+
+def mobile_calendar_episode(item: dict[str, Any]) -> dict[str, Any]:
+    platform = item.get("platform") or item.get("plateforme") or "unknown"
+    return {
+        "id": item.get("id"),
+        "serie_id": item.get("serie_id"),
+        "title": item.get("serie_title"),
+        "poster_url": item.get("poster_url") or item.get("image_url"),
+        "platform": platform,
+        "platform_label": PLATFORM_LABELS.get(platform, platform),
+        "season": item.get("saison"),
+        "episode": item.get("episode"),
+        "episode_title": item.get("titre_episode"),
+        "release_date": item.get("release_date") or item.get("date_diffusion"),
+        "watched": bool(item.get("watched")),
+        "deep_link_url": item.get("episode_url")
+        or fetch_deep_link_url(int(item["serie_id"]), platform=platform),
+    }
+
+
+def fetch_deep_link_url(series_id: int, *, platform: str | None = None) -> str | None:
+    row = (
+        get_db()
+        .execute(
+            """
+        SELECT episode_url
+        FROM history
+        WHERE serie_id = ? AND episode_url IS NOT NULL AND episode_url != ''
+        ORDER BY date_vu DESC, created_at DESC, id DESC
+        LIMIT 1
+        """,
+            (series_id,),
+        )
+        .fetchone()
+    )
+    if row and row["episode_url"]:
+        return row["episode_url"]
+    row = (
+        get_db()
+        .execute(
+            """
+        SELECT episode_url
+        FROM calendar
+        WHERE serie_id = ? AND episode_url IS NOT NULL AND episode_url != ''
+        ORDER BY date_diffusion DESC, id DESC
+        LIMIT 1
+        """,
+            (series_id,),
+        )
+        .fetchone()
+    )
+    if row and row["episode_url"]:
+        return row["episode_url"]
+    serie = fetch_series(series_id)
+    if not serie:
+        return None
+    return fetch_platform_fallback_url(
+        platform or serie.get("platform"), serie.get("titre")
+    ) or serie.get("betaseries_url") or serie.get("imdb_url")
+
+
+def fetch_platform_fallback_url(platform: str | None, title: str | None) -> str | None:
+    if not platform or not title:
+        return None
+    from urllib.parse import quote_plus
+
+    encoded_title = quote_plus(title)
+    urls = {
+        "crunchyroll": f"https://www.crunchyroll.com/fr/search?q={encoded_title}",
+        "netflix": f"https://www.netflix.com/search?q={encoded_title}",
+        "prime_video": f"https://www.primevideo.com/search/ref=atv_nb_sr?phrase={encoded_title}",
+        "disney_plus": f"https://www.disneyplus.com/fr-fr/search/{encoded_title}",
+        "canal_plus": f"https://www.canalplus.com/recherche/{encoded_title}",
+    }
+    return urls.get(platform)
 
 
 def infer_status(

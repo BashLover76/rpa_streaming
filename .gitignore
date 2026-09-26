@@ -8,3 +8,8 @@ logs/
 streaming.db
 __pycache__/
 *.py[cod]
+.local/
+android-sdk/
+android/local.properties
+android/.gradle/
+android/**/build/

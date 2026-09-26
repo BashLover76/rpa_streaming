@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 from datetime import datetime
@@ -29,12 +30,12 @@ def main() -> None:
 
 
 def run_until_queue_empty() -> None:
-        while True:
-            job = pop_job()
-            if job is None:
-                write_status({"current": None, "updated_at": now()})
-                return
-            run_job(job)
+    while True:
+        job = pop_job()
+        if job is None:
+            write_status({"current": None, "updated_at": now()})
+            return
+        run_job(job)
 
 
 def run_job(job: dict[str, Any]) -> None:
@@ -42,15 +43,7 @@ def run_job(job: dict[str, Any]) -> None:
     write_status({"current": job, "updated_at": now()})
     log_path = ROOT / job["log_path"]
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    command = [
-        sys.executable,
-        "main_ingestion.py",
-        "--platform",
-        job["platform"],
-        "--cdp-url",
-        os.getenv("RPA_CDP_URL", "http://127.0.0.1:9222"),
-        "--skip-crunchyroll-api",
-    ]
+    command = build_rpa_command(job["platform"])
     with log_path.open("ab") as log_file:
         log_file.write(
             f"{now()} | INFO | admin_rpa_worker | queued job started: {job['platform']}\n".encode()
@@ -68,6 +61,52 @@ def run_job(job: dict[str, Any]) -> None:
     job["finished_at"] = now()
     job["return_code"] = return_code
     write_status({"current": None, "last_completed": job, "updated_at": now()})
+
+
+def build_rpa_command(platform: str) -> list[str]:
+    runner = os.getenv("ADMIN_RPA_RUNNER", "local").strip().casefold()
+    if runner == "docker":
+        compose_file = os.getenv("ADMIN_RPA_COMPOSE_FILE", "docker-compose.rpa.yml")
+        service = os.getenv("ADMIN_RPA_DOCKER_SERVICE", "rpa-job")
+        return [
+            "docker",
+            "compose",
+            "-f",
+            compose_file,
+            "run",
+            "--build",
+            "--rm",
+            service,
+            "python",
+            "main_ingestion.py",
+            "--platform",
+            platform,
+            "--cdp-url",
+            os.getenv("RPA_CDP_URL", "http://host.docker.internal:9222"),
+            "--rpa-mode",
+            "differential",
+            "--skip-crunchyroll-api",
+            "--no-auto-start-chrome",
+        ]
+    if runner == "command":
+        template = os.getenv("ADMIN_RPA_COMMAND_TEMPLATE", "").strip()
+        if not template:
+            raise RuntimeError(
+                "ADMIN_RPA_COMMAND_TEMPLATE is required when ADMIN_RPA_RUNNER=command"
+            )
+        return shlex.split(template.format(platform=platform))
+    return [
+        sys.executable,
+        "main_ingestion.py",
+        "--platform",
+        platform,
+        "--cdp-url",
+        os.getenv("RPA_CDP_URL", "http://127.0.0.1:9222"),
+        "--rpa-mode",
+        "differential",
+        "--skip-crunchyroll-api",
+        "--no-auto-start-chrome",
+    ]
 
 
 def pop_job() -> dict[str, Any] | None:
