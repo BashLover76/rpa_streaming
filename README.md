@@ -19,6 +19,9 @@ flowchart TD
 - [Configuration](docs/configuration.md) : `.env`, plateformes, credentials RPA, sécurité et limites.
 - [Utilisation](docs/usage.md) : commandes d'ingestion, Chrome CDP, modes full/différentiel, enrichissement et sync BetaSeries.
 - [Application web et administration](docs/web-admin.md) : vues calendrier/admin et suppression locale/distante.
+- [Docker web app](docs/docker.md) : image Docker et compose pour exposer Flask/API sur le minisforum.
+- [Application Android](docs/mobile.md) : app mobile, synchronisation minisforum et deep links streaming.
+- [Versioning et Git](docs/versioning.md) : versions Android/Docker, branches et commits recommandés.
 - [Architecture](docs/architecture.md) : schéma de flux, couches internes et extension navigateur.
 - [Connecteurs](docs/connectors.md) : stratégies par plateforme et notes API/RPA.
 - [Logs et observabilité](docs/observability.md) : fichiers logs, rotation, Grafana/Loki.
