@@ -4,6 +4,27 @@ Tous les changements notables de ce projet sont documentés ici.
 
 Le format suit l'esprit de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet utilise pour l'instant un versionnement interne non tagué.
 
+## [0.3.1] - 2026-09-27
+
+### Ajouté
+
+- Matrice de profils configurable via `.env` avec `STREAMING_PROFILES` et
+  `DEFAULT_PROFILE_KEY`.
+- Colonnes SQLite `profile_key` et `suitable_for_junior` pour les titres et les
+  historiques.
+- Sélecteur de profil dans les vues web séries, films et calendrier.
+- Exposition des profils dans l'API mobile et sélection du profil actif dans
+  l'écran Admin Android.
+- Documentation de configuration des profils et du comportement mobile associé.
+
+### Modifié
+
+- Les flux web et API mobile filtrent selon le profil actif et le flag junior.
+- Les listes séries et films sont triées en priorité par dernière date de
+  visionnage ou d'ingestion en ordre antéchronologique.
+- L'ingestion annote les nouveaux historiques avec le profil par défaut sans
+  valeur nominative hardcodée.
+
 ## [0.3.0] - 2026-09-26
 
 ### Ajouté

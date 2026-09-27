@@ -10,6 +10,14 @@ load_dotenv()
 
 
 @dataclass(frozen=True)
+class StreamingProfile:
+    key: str
+    label: str
+    technical_id: str
+    is_junior: bool = False
+
+
+@dataclass(frozen=True)
 class Settings:
     betaseries_api_key: str
     betaseries_client_secret: str
@@ -34,10 +42,14 @@ class Settings:
     crunchyroll_locale: str
     rpa_credentials: dict[str, dict[str, str]]
     rpa_profile_names: dict[str, str]
+    profiles: dict[str, StreamingProfile]
+    default_profile_key: str
 
     @classmethod
     def from_env(cls) -> "Settings":
         extension_path = os.getenv("RPA_BROWSER_EXTENSION_PATH", "").strip()
+        profiles = _load_profiles_from_env()
+        default_profile_key = _load_default_profile_key(profiles)
         credentials = {
             "crunchyroll": {
                 "email": os.getenv("CRUNCHYROLL_EMAIL", ""),
@@ -118,4 +130,60 @@ class Settings:
             crunchyroll_locale=os.getenv("CRUNCHYROLL_LOCALE", "fr-FR"),
             rpa_credentials=credentials,
             rpa_profile_names=profile_names,
+            profiles=profiles,
+            default_profile_key=default_profile_key,
         )
+
+
+def _load_profiles_from_env() -> dict[str, StreamingProfile]:
+    raw_profiles = os.getenv("STREAMING_PROFILES", "").strip()
+    if raw_profiles:
+        profiles = _parse_profile_matrix(raw_profiles)
+        if profiles:
+            return profiles
+
+    fallback_key = os.getenv("DEFAULT_PROFILE_KEY", "default").strip() or "default"
+    fallback_label = os.getenv("DEFAULT_PROFILE_LABEL", "Profil par défaut").strip()
+    return {
+        fallback_key: StreamingProfile(
+            key=fallback_key,
+            label=fallback_label or fallback_key,
+            technical_id=os.getenv("DEFAULT_PROFILE_TECHNICAL_ID", fallback_key).strip()
+            or fallback_key,
+            is_junior=_env_bool("DEFAULT_PROFILE_IS_JUNIOR"),
+        )
+    }
+
+
+def _parse_profile_matrix(raw_profiles: str) -> dict[str, StreamingProfile]:
+    profiles: dict[str, StreamingProfile] = {}
+    for chunk in raw_profiles.split(";"):
+        parts = [part.strip() for part in chunk.split("|")]
+        if len(parts) < 2 or not parts[0]:
+            continue
+        key = parts[0]
+        label = parts[1] or key
+        technical_id = parts[2] if len(parts) >= 3 and parts[2] else key
+        is_junior = _parse_bool(parts[3]) if len(parts) >= 4 else False
+        profiles[key] = StreamingProfile(
+            key=key,
+            label=label,
+            technical_id=technical_id,
+            is_junior=is_junior,
+        )
+    return profiles
+
+
+def _load_default_profile_key(profiles: dict[str, StreamingProfile]) -> str:
+    requested = os.getenv("DEFAULT_PROFILE_KEY", "").strip()
+    if requested and requested in profiles:
+        return requested
+    return next(iter(profiles))
+
+
+def _env_bool(name: str) -> bool:
+    return _parse_bool(os.getenv(name, ""))
+
+
+def _parse_bool(value: str) -> bool:
+    return value.strip().casefold() in {"1", "true", "yes", "y", "on", "junior"}

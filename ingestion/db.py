@@ -10,9 +10,18 @@ from typing import Any, Iterator
 
 
 class StreamingDB:
-    def __init__(self, db_path: Path | str, *, stage_history: bool = False) -> None:
+    def __init__(
+        self,
+        db_path: Path | str,
+        *,
+        stage_history: bool = False,
+        default_profile_key: str | None = None,
+        default_suitable_for_junior: bool = False,
+    ) -> None:
         self.db_path = Path(db_path)
         self.stage_history = stage_history
+        self.default_profile_key = default_profile_key
+        self.default_suitable_for_junior = default_suitable_for_junior
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
@@ -58,6 +67,8 @@ class StreamingDB:
                     notes_mean REAL,
                     notes_total INTEGER,
                     last_updated_at TEXT,
+                    profile_key TEXT,
+                    suitable_for_junior INTEGER NOT NULL DEFAULT 0,
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
 
@@ -95,6 +106,8 @@ class StreamingDB:
                     betaseries_synced_at TEXT,
                     sync_status TEXT,
                     sync_error TEXT,
+                    profile_key TEXT,
+                    suitable_for_junior INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (serie_id) REFERENCES series(id) ON DELETE CASCADE,
                     UNIQUE (serie_id, saison, episode, date_vu, plateforme_source)
@@ -137,6 +150,12 @@ class StreamingDB:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS raw_history_status ON raw_history(status, platform)"
             )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS history_recent_profile ON history(profile_key, date_vu DESC, created_at DESC)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS series_profile_junior ON series(profile_key, suitable_for_junior)"
+            )
 
     @staticmethod
     def _ensure_series_columns(conn: sqlite3.Connection) -> None:
@@ -173,6 +192,8 @@ class StreamingDB:
             "imdb_kind": "ALTER TABLE series ADD COLUMN imdb_kind TEXT",
             "imdb_year": "ALTER TABLE series ADD COLUMN imdb_year INTEGER",
             "imdb_plot": "ALTER TABLE series ADD COLUMN imdb_plot TEXT",
+            "profile_key": "ALTER TABLE series ADD COLUMN profile_key TEXT",
+            "suitable_for_junior": "ALTER TABLE series ADD COLUMN suitable_for_junior INTEGER NOT NULL DEFAULT 0",
         }
         for column, statement in migrations.items():
             if column not in columns:
@@ -207,6 +228,8 @@ class StreamingDB:
             "betaseries_synced_at": "ALTER TABLE history ADD COLUMN betaseries_synced_at TEXT",
             "sync_status": "ALTER TABLE history ADD COLUMN sync_status TEXT",
             "sync_error": "ALTER TABLE history ADD COLUMN sync_error TEXT",
+            "profile_key": "ALTER TABLE history ADD COLUMN profile_key TEXT",
+            "suitable_for_junior": "ALTER TABLE history ADD COLUMN suitable_for_junior INTEGER NOT NULL DEFAULT 0",
         }
         for column, statement in migrations.items():
             if column not in columns:
@@ -462,6 +485,7 @@ class StreamingDB:
             )
 
     def stage_history_item(self, item: dict[str, Any]) -> bool:
+        item = self._with_default_profile(item)
         payload = json.dumps(item, sort_keys=True, ensure_ascii=False)
         fingerprint = hashlib.sha256(payload.encode("utf-8")).hexdigest()
         with self.connect() as conn:
@@ -504,6 +528,7 @@ class StreamingDB:
         return known
 
     def insert_history_item(self, item: dict[str, Any]) -> bool:
+        item = self._with_default_profile(item)
         if self.stage_history:
             return self.stage_history_item(item)
         serie_id = item.get("serie_id")
@@ -531,7 +556,17 @@ class StreamingDB:
             betaseries_id=item.get("betaseries_id"),
             platform=item.get("platform"),
         )
+        profile_key = item.get("profile_key")
+        suitable_for_junior = 1 if item.get("suitable_for_junior") else 0
         with self.connect() as conn:
+            if profile_key:
+                conn.execute(
+                    """UPDATE series
+                       SET profile_key = COALESCE(profile_key, ?),
+                           suitable_for_junior = MAX(COALESCE(suitable_for_junior, 0), ?)
+                       WHERE id = ?""",
+                    (profile_key, suitable_for_junior, serie_id),
+                )
             if item.get("series_source_key"):
                 conn.execute(
                     "INSERT OR IGNORE INTO series_sources(source_key, plateforme, serie_id) VALUES(?, ?, ?)",
@@ -567,7 +602,9 @@ class StreamingDB:
                     """UPDATE history SET saison=COALESCE(saison, ?), episode=COALESCE(episode, ?),
                        raw_title=COALESCE(?, raw_title), confidence=COALESCE(?, confidence),
                        episode_title=COALESCE(?, episode_title), episode_url=COALESCE(?, episode_url),
-                       progress_percent=COALESCE(?, progress_percent), status=COALESCE(?, status)
+                       progress_percent=COALESCE(?, progress_percent), status=COALESCE(?, status),
+                       profile_key=COALESCE(profile_key, ?),
+                       suitable_for_junior=MAX(COALESCE(suitable_for_junior, 0), ?)
                        WHERE id=?""",
                     (
                         item.get("season"),
@@ -578,6 +615,8 @@ class StreamingDB:
                         item.get("episode_url"),
                         item.get("progress_percent"),
                         item.get("status"),
+                        profile_key,
+                        suitable_for_junior,
                         existing["id"],
                     ),
                 )
@@ -586,16 +625,19 @@ class StreamingDB:
                 """
                 INSERT INTO history (
                     serie_id, saison, episode, date_vu, plateforme_source,
-                    raw_title, confidence, episode_title, episode_url, progress_percent, status
+                    raw_title, confidence, episode_title, episode_url, progress_percent,
+                    status, profile_key, suitable_for_junior
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(serie_id, saison, episode, date_vu, plateforme_source) DO UPDATE SET
                     raw_title = COALESCE(excluded.raw_title, history.raw_title),
                     confidence = COALESCE(excluded.confidence, history.confidence),
                     episode_title = COALESCE(excluded.episode_title, history.episode_title),
                     episode_url = COALESCE(excluded.episode_url, history.episode_url),
                     progress_percent = COALESCE(excluded.progress_percent, history.progress_percent),
-                    status = COALESCE(excluded.status, history.status)
+                    status = COALESCE(excluded.status, history.status),
+                    profile_key = COALESCE(history.profile_key, excluded.profile_key),
+                    suitable_for_junior = MAX(COALESCE(history.suitable_for_junior, 0), excluded.suitable_for_junior)
                 """,
                 (
                     serie_id,
@@ -609,9 +651,20 @@ class StreamingDB:
                     item.get("episode_url"),
                     item.get("progress_percent"),
                     item.get("status"),
+                    profile_key,
+                    suitable_for_junior,
                 ),
             )
             return cursor.rowcount > 0
+
+    def _with_default_profile(self, item: dict[str, Any]) -> dict[str, Any]:
+        if item.get("profile_key") and "suitable_for_junior" in item:
+            return item
+        enriched = dict(item)
+        if self.default_profile_key and not enriched.get("profile_key"):
+            enriched["profile_key"] = self.default_profile_key
+        enriched.setdefault("suitable_for_junior", self.default_suitable_for_junior)
+        return enriched
 
     def update_history_sync(
         self,

@@ -200,7 +200,7 @@ details[open] > summary::after { content: "−"; }
 .watched-mark.is-unwatched::after { width: 18px; height: 1.5px; top: 6px; left: -2px; border-radius: 0; transform: rotate(-45deg); background: currentColor; }
 .mobile-day { display: none; }
 .calendar-empty { padding: 16px 0; }
-a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 @media (max-width: 820px) {
   .detail-hero > .detail-poster + div { max-width: none; margin-left: 0; }

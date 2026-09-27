@@ -46,6 +46,33 @@ Variables communes:
 | `PLATFORM_CONFIG_PATH` | Index ou fichier plateforme |
 | `RPA_BROWSER_EXTENSION_PATH` | Extension helper locale |
 
+## Profils applicatifs
+
+Les profils utilisés par le web, l'API mobile et l'ingestion sont configurés
+dans `.env`. Le code ne doit jamais contenir de nom de profil nominatif en dur.
+
+```text
+STREAMING_PROFILES=default|Profil principal|default|false;junior|Profil junior|junior|true
+DEFAULT_PROFILE_KEY=default
+```
+
+Format de `STREAMING_PROFILES` :
+
+```text
+cle|libelle affichage|identifiant technique|profil junior
+```
+
+- `cle` : clé stable envoyée par les interfaces et stockée dans SQLite.
+- `libelle affichage` : texte affiché dans les sélecteurs web/mobile.
+- `identifiant technique` : valeur libre pour faire le lien avec une plateforme
+  ou un annuaire si nécessaire.
+- `profil junior` : `true`, `false`, `1`, `0`, `yes` ou `no`.
+
+`DEFAULT_PROFILE_KEY` doit pointer vers une entrée de la matrice. Si la variable
+est absente, le premier profil de la matrice est utilisé. Les historiques ingérés
+reçoivent ce profil par défaut, puis les vues peuvent filtrer dynamiquement par
+profil. Un profil marqué junior applique aussi le filtre `suitable_for_junior`.
+
 Variables API:
 
 | Variable | Usage |

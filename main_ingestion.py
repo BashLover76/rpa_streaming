@@ -124,9 +124,19 @@ def main() -> None:
 
 def run(args: argparse.Namespace) -> None:
     settings = Settings.from_env()
-    db = StreamingDB(settings.db_path)
+    default_profile = settings.profiles[settings.default_profile_key]
+    db = StreamingDB(
+        settings.db_path,
+        default_profile_key=default_profile.key,
+        default_suitable_for_junior=default_profile.is_junior,
+    )
     db.init_schema()
-    collector_db = StreamingDB(settings.db_path, stage_history=True)
+    collector_db = StreamingDB(
+        settings.db_path,
+        stage_history=True,
+        default_profile_key=default_profile.key,
+        default_suitable_for_junior=default_profile.is_junior,
+    )
     if args.content_type != "all":
         logging.warning(
             "--content-type is deprecated: collecting all history; IMDb determines the type."
