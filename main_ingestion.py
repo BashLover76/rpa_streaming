@@ -177,6 +177,11 @@ def run(args: argparse.Namespace) -> None:
             timeout=settings.ollama_timeout,
         )
         platform_configs = load_platform_configs(settings.platform_config_path)
+        platform_configs = [
+            platform_config
+            for platform_config in platform_configs
+            if settings.streaming_platforms.get(platform_config.name, True)
+        ]
         if args.platform:
             platform_configs = [
                 platform_config

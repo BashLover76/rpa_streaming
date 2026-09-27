@@ -10,6 +10,8 @@ Le format suit l'esprit de [Keep a Changelog](https://keepachangelog.com/fr/1.1.
 
 - Matrice de profils configurable via `.env` avec `STREAMING_PROFILES` et
   `DEFAULT_PROFILE_KEY`.
+- Mapping JSON `STREAMING_PLATFORMS` et `STREAMING_PLATFORM_CONFIG` pour gérer
+  l'activation, les credentials RPA et les profils par plateforme.
 - Colonnes SQLite `profile_key` et `suitable_for_junior` pour les titres et les
   historiques.
 - Sélecteur de profil dans les vues web séries, films et calendrier.
@@ -24,6 +26,8 @@ Le format suit l'esprit de [Keep a Changelog](https://keepachangelog.com/fr/1.1.
   visionnage ou d'ingestion en ordre antéchronologique.
 - L'ingestion annote les nouveaux historiques avec le profil par défaut sans
   valeur nominative hardcodée.
+- Le compose RPA lit maintenant `.env` et transmet la configuration JSON des
+  plateformes au conteneur.
 
 ## [0.3.0] - 2026-09-26
 

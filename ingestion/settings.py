@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,6 +43,7 @@ class Settings:
     crunchyroll_locale: str
     rpa_credentials: dict[str, dict[str, str]]
     rpa_profile_names: dict[str, str]
+    streaming_platforms: dict[str, bool]
     profiles: dict[str, StreamingProfile]
     default_profile_key: str
 
@@ -50,55 +52,10 @@ class Settings:
         extension_path = os.getenv("RPA_BROWSER_EXTENSION_PATH", "").strip()
         profiles = _load_profiles_from_env()
         default_profile_key = _load_default_profile_key(profiles)
-        credentials = {
-            "crunchyroll": {
-                "email": os.getenv("CRUNCHYROLL_EMAIL", ""),
-                "password": os.getenv("CRUNCHYROLL_PASSWORD", ""),
-            },
-            "netflix": {
-                "email": os.getenv("NETFLIX_EMAIL", ""),
-                "password": os.getenv("NETFLIX_PASSWORD", ""),
-            },
-            "prime_video": {
-                "email": os.getenv("PRIME_VIDEO_EMAIL", ""),
-                "password": os.getenv("PRIME_VIDEO_PASSWORD", ""),
-            },
-            "disney_plus": {
-                "email": os.getenv("DISNEY_PLUS_EMAIL", ""),
-                "password": os.getenv("DISNEY_PLUS_PASSWORD", ""),
-            },
-            "canal_plus": {
-                "email": os.getenv("CANAL_PLUS_EMAIL", ""),
-                "password": os.getenv("CANAL_PLUS_PASSWORD", ""),
-            },
-            "apple_tv_plus": {
-                "email": os.getenv("APPLE_TV_EMAIL", ""),
-                "password": os.getenv("APPLE_TV_PASSWORD", ""),
-            },
-            "max": {
-                "email": os.getenv("MAX_EMAIL", ""),
-                "password": os.getenv("MAX_PASSWORD", ""),
-            },
-            "paramount_plus": {
-                "email": os.getenv("PARAMOUNT_PLUS_EMAIL", ""),
-                "password": os.getenv("PARAMOUNT_PLUS_PASSWORD", ""),
-            },
-            "ocs": {
-                "email": os.getenv("OCS_EMAIL", ""),
-                "password": os.getenv("OCS_PASSWORD", ""),
-            },
-        }
-        profile_names = {
-            "netflix": os.getenv("NETFLIX_PROFILE_NAME", ""),
-            "prime_video": os.getenv("PRIME_VIDEO_PROFILE_NAME", ""),
-            "disney_plus": os.getenv("DISNEY_PLUS_PROFILE_NAME", ""),
-            "canal_plus": os.getenv("CANAL_PLUS_PROFILE_NAME", ""),
-            "apple_tv_plus": os.getenv("APPLE_TV_PROFILE_NAME", ""),
-            "max": os.getenv("MAX_PROFILE_NAME", ""),
-            "paramount_plus": os.getenv("PARAMOUNT_PLUS_PROFILE_NAME", ""),
-            "ocs": os.getenv("OCS_PROFILE_NAME", ""),
-            "crunchyroll": os.getenv("CRUNCHYROLL_PROFILE_NAME", ""),
-        }
+        platform_config = _load_streaming_platform_config()
+        streaming_platforms = _load_streaming_platforms(platform_config)
+        credentials = _credentials_from_platform_config(platform_config)
+        profile_names = _profile_names_from_platform_config(platform_config)
         return cls(
             betaseries_api_key=os.getenv("BETASERIES_API_KEY", ""),
             betaseries_client_secret=os.getenv(
@@ -130,9 +87,100 @@ class Settings:
             crunchyroll_locale=os.getenv("CRUNCHYROLL_LOCALE", "fr-FR"),
             rpa_credentials=credentials,
             rpa_profile_names=profile_names,
+            streaming_platforms=streaming_platforms,
             profiles=profiles,
             default_profile_key=default_profile_key,
         )
+
+
+PLATFORM_ENV_PREFIXES = {
+    "crunchyroll": "CRUNCHYROLL",
+    "netflix": "NETFLIX",
+    "prime_video": "PRIME_VIDEO",
+    "disney_plus": "DISNEY_PLUS",
+    "canal_plus": "CANAL_PLUS",
+    "apple_tv_plus": "APPLE_TV",
+    "max": "MAX",
+    "paramount_plus": "PARAMOUNT_PLUS",
+    "ocs": "OCS",
+}
+
+
+def _load_streaming_platform_config() -> dict[str, dict[str, str]]:
+    legacy_config = _legacy_platform_config_from_env()
+    raw_config = os.getenv("STREAMING_PLATFORM_CONFIG", "").strip()
+    if not raw_config:
+        return legacy_config
+    parsed = _load_json_object(raw_config, "STREAMING_PLATFORM_CONFIG")
+    config: dict[str, dict[str, str]] = {}
+    for platform, values in parsed.items():
+        if not isinstance(values, dict):
+            continue
+        config[str(platform)] = {
+            "email": str(values.get("email") or ""),
+            "password": str(values.get("password") or ""),
+            "profile_name": str(
+                values.get("profile_name")
+                or values.get("profil_name")
+                or values.get("profile")
+                or ""
+            ),
+        }
+    for platform, values in legacy_config.items():
+        config.setdefault(platform, values)
+    return config
+
+
+def _legacy_platform_config_from_env() -> dict[str, dict[str, str]]:
+    config: dict[str, dict[str, str]] = {}
+    for platform, prefix in PLATFORM_ENV_PREFIXES.items():
+        config[platform] = {
+            "email": os.getenv(f"{prefix}_EMAIL", ""),
+            "password": os.getenv(f"{prefix}_PASSWORD", ""),
+            "profile_name": os.getenv(f"{prefix}_PROFILE_NAME", ""),
+        }
+    return config
+
+
+def _load_streaming_platforms(
+    platform_config: dict[str, dict[str, str]]
+) -> dict[str, bool]:
+    raw_mapping = os.getenv("STREAMING_PLATFORMS", "").strip()
+    if raw_mapping:
+        parsed = _load_json_object(raw_mapping, "STREAMING_PLATFORMS")
+        return {str(platform): bool(enabled) for platform, enabled in parsed.items()}
+    return {platform: True for platform in platform_config}
+
+
+def _credentials_from_platform_config(
+    platform_config: dict[str, dict[str, str]]
+) -> dict[str, dict[str, str]]:
+    return {
+        platform: {
+            "email": values.get("email", ""),
+            "password": values.get("password", ""),
+        }
+        for platform, values in platform_config.items()
+    }
+
+
+def _profile_names_from_platform_config(
+    platform_config: dict[str, dict[str, str]]
+) -> dict[str, str]:
+    return {
+        platform: values.get("profile_name", "")
+        for platform, values in platform_config.items()
+    }
+
+
+def _load_json_object(raw_value: str, variable_name: str) -> dict[str, object]:
+    try:
+        value = json.loads(raw_value)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{variable_name} must contain a valid JSON object") from exc
+    if not isinstance(value, dict):
+        raise ValueError(f"{variable_name} must contain a JSON object")
+    return value
 
 
 def _load_profiles_from_env() -> dict[str, StreamingProfile]:

@@ -90,34 +90,35 @@ Variables API:
 Variables RPA de connexion:
 
 ```text
-NETFLIX_EMAIL=
-NETFLIX_PASSWORD=
-NETFLIX_PROFILE_NAME=
-PRIME_VIDEO_EMAIL=
-PRIME_VIDEO_PASSWORD=
-PRIME_VIDEO_PROFILE_NAME=
-DISNEY_PLUS_EMAIL=
-DISNEY_PLUS_PASSWORD=
-DISNEY_PLUS_PROFILE_NAME=
-CANAL_PLUS_EMAIL=
-CANAL_PLUS_PASSWORD=
-CANAL_PLUS_PROFILE_NAME=
-APPLE_TV_EMAIL=
-APPLE_TV_PASSWORD=
-APPLE_TV_PROFILE_NAME=
-MAX_EMAIL=
-MAX_PASSWORD=
-MAX_PROFILE_NAME=
-PARAMOUNT_PLUS_EMAIL=
-PARAMOUNT_PLUS_PASSWORD=
-PARAMOUNT_PLUS_PROFILE_NAME=
-OCS_EMAIL=
-OCS_PASSWORD=
-OCS_PROFILE_NAME=
-CRUNCHYROLL_PROFILE_NAME=
+STREAMING_PLATFORMS={"crunchyroll":true,"netflix":true,"prime_video":true,"disney_plus":true,"canal_plus":true}
+STREAMING_PLATFORM_CONFIG={"netflix":{"email":"","password":"","profile_name":""},"disney_plus":{"email":"","password":"","profile_name":""}}
 ```
 
-Ces credentials sont utilisés par le RPA pour remplir les écrans de connexion. Les variables `*_PROFILE_NAME` servent à choisir un profil utilisateur quand la plateforme affiche un écran de sélection de profil. Les valeurs sensibles et les noms de profil ne sont pas écrits dans les logs. La connexion manuelle ne reste nécessaire que pour les validations interactives comme MFA, CAPTCHA ou approbation d'un nouvel appareil.
+`STREAMING_PLATFORMS` active ou désactive chaque plateforme. Une plateforme à
+`false` est ignorée par l'orchestrateur RPA, sauf si elle est retirée de la
+configuration plateforme.
+
+`STREAMING_PLATFORM_CONFIG` contient les informations de connexion RPA par
+plateforme:
+
+```json
+{
+  "netflix": {
+    "email": "user@example.test",
+    "password": "mot_de_passe",
+    "profile_name": "Profil affiché"
+  }
+}
+```
+
+La clé canonique est `profile_name`. La variante `profil_name` est acceptée pour
+tolérer les anciennes saisies, mais la documentation utilise `profile_name`.
+Les anciennes variables `NETFLIX_EMAIL`, `NETFLIX_PASSWORD`,
+`NETFLIX_PROFILE_NAME`, etc. restent supportées en fallback pour ne pas casser
+les environnements existants. Les valeurs sensibles et les noms de profil ne
+sont pas écrits dans les logs. La connexion manuelle ne reste nécessaire que
+pour les validations interactives comme MFA, CAPTCHA ou approbation d'un nouvel
+appareil.
 
 ## Securite et conformite
 
