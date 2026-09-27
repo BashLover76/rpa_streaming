@@ -4,7 +4,7 @@ Le dossier `android/` contient l'application Android native `StreamPilot`.
 Elle consomme l'API web du serveur local, fonctionne offline après synchronisation
 et ne lance pas le RPA.
 
-Version actuelle : `0.4.0`. Le numéro de version est visible dans l'écran
+Version actuelle : `0.4.1`. Le numéro de version est visible dans l'écran
 `Admin` de l'application.
 
 ## Synchronisation avec le serveur local

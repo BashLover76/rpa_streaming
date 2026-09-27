@@ -53,7 +53,7 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private static final int DEFAULT_PAGE_SIZE = 10;
-    private static final String APP_VERSION = "0.4.0";
+    private static final String APP_VERSION = "0.4.1";
 
     private final ExecutorService executor = Executors.newFixedThreadPool(3);
     private final List<Screen> backStack = new ArrayList<>();
@@ -319,7 +319,13 @@ public class MainActivity extends Activity {
             items.sort(Comparator.comparing(item -> item.optString("title", "").toLowerCase()));
             return;
         }
-        items.sort(Comparator.comparing((JSONObject item) -> item.optString("last_watched_at", "")).reversed());
+        items.sort(Comparator.comparing((JSONObject item) -> sortableDate(item.optString("last_watched_at", ""))).reversed());
+    }
+
+    private String sortableDate(String value) {
+        if (value == null) return "";
+        String trimmed = value.trim();
+        return trimmed.matches("\\d{4}-\\d{2}-\\d{2}.*") ? trimmed : "";
     }
 
     private void addSortFilter() {
@@ -559,9 +565,13 @@ public class MainActivity extends Activity {
         JSONArray profiles = bootstrap == null ? null : bootstrap.optJSONArray("profiles");
         if (profiles == null || profiles.length() == 0) {
             row.addView(line(tr("profile_sync_required")));
+            Button reload = button(tr("load_profiles"), true);
+            reload.setOnClickListener(v -> refreshBootstrapOnly());
+            row.addView(reload);
             content.addView(row);
             return;
         }
+        applyDefaultProfileFromBootstrap(bootstrap);
         for (int index = 0; index < profiles.length(); index++) {
             JSONObject profile = profiles.optJSONObject(index);
             if (profile == null) continue;
@@ -573,6 +583,7 @@ public class MainActivity extends Activity {
                 activeProfileKey = key;
                 prefs.edit().putString("profile_key", key).apply();
                 Toast.makeText(this, tr("profile_saved"), Toast.LENGTH_SHORT).show();
+                synchronizeOfflineDatabase();
             });
             row.addView(button);
         }
@@ -690,6 +701,27 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void refreshBootstrapOnly() {
+        prefs.edit().putString("server_url", normalizedServerUrl()).apply();
+        progress.setVisibility(ProgressBar.VISIBLE);
+        executor.submit(() -> {
+            try {
+                JSONObject bootstrap = fetchSync("/api/mobile/bootstrap");
+                applyDefaultProfileFromBootstrap(bootstrap);
+                writeCacheJson("bootstrap", bootstrap);
+                runOnUiThread(() -> {
+                    progress.setVisibility(ProgressBar.GONE);
+                    render(Screen.admin());
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    progress.setVisibility(ProgressBar.GONE);
+                    Toast.makeText(this, tr("sync_failed") + ": " + error.getMessage(), Toast.LENGTH_LONG).show();
+                });
+            }
+        });
+    }
+
     private JSONObject fetchAllTitles(String type, JSONObject firstPage) throws Exception {
         JSONArray merged = new JSONArray();
         appendItems(merged, firstPage.optJSONArray("items"));
@@ -703,12 +735,34 @@ public class MainActivity extends Activity {
 
     private void applyDefaultProfileFromBootstrap(JSONObject bootstrap) {
         if (bootstrap == null) return;
-        if (activeProfileKey == null || activeProfileKey.isEmpty()) {
-            activeProfileKey = bootstrap.optString("default_profile_key", "");
-            if (!activeProfileKey.isEmpty()) {
-                prefs.edit().putString("profile_key", activeProfileKey).apply();
-            }
+        JSONArray profiles = bootstrap.optJSONArray("profiles");
+        if (activeProfileKey != null && !activeProfileKey.isEmpty()
+                && profileExists(profiles, activeProfileKey)) {
+            return;
         }
+        String defaultKey = bootstrap.optString("default_profile_key", "");
+        if (defaultKey.isEmpty() || !profileExists(profiles, defaultKey)) {
+            defaultKey = firstProfileKey(profiles);
+        }
+        if (!defaultKey.isEmpty()) {
+            activeProfileKey = defaultKey;
+            prefs.edit().putString("profile_key", activeProfileKey).apply();
+        }
+    }
+
+    private boolean profileExists(JSONArray profiles, String key) {
+        if (profiles == null || key == null || key.isEmpty()) return false;
+        for (int index = 0; index < profiles.length(); index++) {
+            JSONObject profile = profiles.optJSONObject(index);
+            if (profile != null && key.equals(profile.optString("key", ""))) return true;
+        }
+        return false;
+    }
+
+    private String firstProfileKey(JSONArray profiles) {
+        if (profiles == null || profiles.length() == 0) return "";
+        JSONObject profile = profiles.optJSONObject(0);
+        return profile == null ? "" : profile.optString("key", "");
     }
 
     private String profileQuery() {
@@ -920,6 +974,7 @@ public class MainActivity extends Activity {
             case "language": return "Langue";
             case "last_sync": return "Dernière synchro";
             case "last_seen": return "Derniers vus";
+            case "load_profiles": return "Charger les profils";
             case "movies": return "Films";
             case "movies_by_platform": return "Films par plateforme";
             case "next": return "Suivant";
@@ -977,6 +1032,7 @@ public class MainActivity extends Activity {
             case "language": return "Language";
             case "last_sync": return "Last sync";
             case "last_seen": return "Last watched";
+            case "load_profiles": return "Load profiles";
             case "movies": return "Movies";
             case "movies_by_platform": return "Movies by platform";
             case "next": return "Next";
@@ -1034,6 +1090,7 @@ public class MainActivity extends Activity {
             case "language": return "Idioma";
             case "last_sync": return "Última synchro";
             case "last_seen": return "Últimos vistos";
+            case "load_profiles": return "Cargar perfiles";
             case "movies": return "Películas";
             case "movies_by_platform": return "Películas por plataforma";
             case "next": return "Siguiente";
@@ -1284,16 +1341,23 @@ public class MainActivity extends Activity {
         }
     }
 
-    private static String cacheKeyForTitles(String type) {
-        return "titles_" + type;
+    private String cacheKeyForTitles(String type) {
+        return "titles_" + safeCacheProfile() + "_" + type;
     }
 
     private static String cacheKeyForDetail(int id) {
         return "detail_" + id;
     }
 
-    private static String cacheKeyForCalendar(YearMonth month) {
-        return "calendar_" + month;
+    private String cacheKeyForCalendar(YearMonth month) {
+        return "calendar_" + safeCacheProfile() + "_" + month;
+    }
+
+    private String safeCacheProfile() {
+        String value = activeProfileKey == null || activeProfileKey.isEmpty()
+                ? "default"
+                : activeProfileKey;
+        return value.replaceAll("[^A-Za-z0-9_-]", "_");
     }
 
     private static final class Screen {

@@ -1,6 +1,6 @@
 services:
   rpa-job:
-    image: ${STREAMING_RPA_IMAGE:-rpa-streaming-rpa}:${STREAMING_RPA_TAG:-0.4.0}
+    image: ${STREAMING_RPA_IMAGE:-rpa-streaming-rpa}:${STREAMING_RPA_TAG:-0.4.1}
     build:
       context: .
       dockerfile: Dockerfile.rpa
