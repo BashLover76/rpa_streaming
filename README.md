@@ -22,6 +22,7 @@ flowchart TD
 - [Docker web app](docs/docker.md) : image Docker et compose pour exposer Flask/API sur le serveur local.
 - [Application Android](docs/mobile.md) : app mobile, synchronisation serveur local et deep links streaming.
 - [Versioning et Git](docs/versioning.md) : versions Android/Docker, branches et commits recommandés.
+- [GitFlow strict](docs/gitflow.md) : règles de branches, release, hotfix, merge et tags.
 - [Architecture](docs/architecture.md) : schéma de flux, couches internes et extension navigateur.
 - [Connecteurs](docs/connectors.md) : stratégies par plateforme et notes API/RPA.
 - [Logs et observabilité](docs/observability.md) : fichiers logs, rotation, Grafana/Loki.

@@ -4,7 +4,7 @@ Tous les changements notables de ce projet sont documentés ici.
 
 Le format suit l'esprit de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet utilise pour l'instant un versionnement interne non tagué.
 
-## [0.3.1] - 2026-09-27
+## [0.4.0] - 2026-09-27
 
 ### Ajouté
 
@@ -66,7 +66,7 @@ Le format suit l'esprit de [Keep a Changelog](https://keepachangelog.com/fr/1.1.
 - RPA Playwright compatible Chrome CDP, Windows, Linux et WSL.
 - Démarrage automatique de Chrome avec CDP et extension locale.
 - Option `--force-restart-chrome` pour fermer Chrome et le relancer avec CDP + extension.
-- Login RPA par plateforme depuis les variables `*_EMAIL` et `*_PASSWORD` du `.env`.
+- Login RPA par plateforme depuis les fichiers JSON locaux référencés par `.env`.
 - Modes RPA `full` et `differential`.
 - Logs par script et par plateforme, avec rotation quotidienne.
 - Connecteur Grafana/Loki via `observability/`.
@@ -84,6 +84,7 @@ Le format suit l'esprit de [Keep a Changelog](https://keepachangelog.com/fr/1.1.
 
 ### Sécurité
 
-- Les secrets restent centralisés dans `.env`.
+- Les secrets restent centralisés dans `.env` et les fichiers `config/*.local.json`
+  ignorés par git.
 - Les credentials RPA ne sont pas écrits dans les logs.
 - Les opérations destructrices distantes restent en dry-run par défaut et demandent `--apply`.
