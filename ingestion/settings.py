@@ -108,10 +108,24 @@ PLATFORM_ENV_PREFIXES = {
 
 def _load_streaming_platform_config() -> dict[str, dict[str, str]]:
     legacy_config = _legacy_platform_config_from_env()
+    file_config = _load_json_file_object(
+        os.getenv("STREAMING_PLATFORM_CONFIG_FILE", "").strip(),
+        "STREAMING_PLATFORM_CONFIG_FILE",
+    )
+    if file_config is not None:
+        return _normalize_platform_config(file_config, legacy_config)
+
     raw_config = os.getenv("STREAMING_PLATFORM_CONFIG", "").strip()
     if not raw_config:
         return legacy_config
     parsed = _load_json_object(raw_config, "STREAMING_PLATFORM_CONFIG")
+    return _normalize_platform_config(parsed, legacy_config)
+
+
+def _normalize_platform_config(
+    parsed: dict[str, object],
+    fallback: dict[str, dict[str, str]],
+) -> dict[str, dict[str, str]]:
     config: dict[str, dict[str, str]] = {}
     for platform, values in parsed.items():
         if not isinstance(values, dict):
@@ -126,7 +140,7 @@ def _load_streaming_platform_config() -> dict[str, dict[str, str]]:
                 or ""
             ),
         }
-    for platform, values in legacy_config.items():
+    for platform, values in fallback.items():
         config.setdefault(platform, values)
     return config
 
@@ -145,6 +159,16 @@ def _legacy_platform_config_from_env() -> dict[str, dict[str, str]]:
 def _load_streaming_platforms(
     platform_config: dict[str, dict[str, str]]
 ) -> dict[str, bool]:
+    file_mapping = _load_json_file_object(
+        os.getenv("STREAMING_PLATFORMS_FILE", "").strip(),
+        "STREAMING_PLATFORMS_FILE",
+    )
+    if file_mapping is not None:
+        return {
+            str(platform): bool(enabled)
+            for platform, enabled in file_mapping.items()
+        }
+
     raw_mapping = os.getenv("STREAMING_PLATFORMS", "").strip()
     if raw_mapping:
         parsed = _load_json_object(raw_mapping, "STREAMING_PLATFORMS")
@@ -181,6 +205,19 @@ def _load_json_object(raw_value: str, variable_name: str) -> dict[str, object]:
     if not isinstance(value, dict):
         raise ValueError(f"{variable_name} must contain a JSON object")
     return value
+
+
+def _load_json_file_object(
+    raw_path: str, variable_name: str
+) -> dict[str, object] | None:
+    if not raw_path:
+        return None
+    path = Path(raw_path)
+    try:
+        raw_value = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"{variable_name} points to an unreadable file: {path}") from exc
+    return _load_json_object(raw_value, variable_name)
 
 
 def _load_profiles_from_env() -> dict[str, StreamingProfile]:

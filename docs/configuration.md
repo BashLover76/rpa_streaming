@@ -90,16 +90,26 @@ Variables API:
 Variables RPA de connexion:
 
 ```text
-STREAMING_PLATFORMS={"crunchyroll":true,"netflix":true,"prime_video":true,"disney_plus":true,"canal_plus":true}
-STREAMING_PLATFORM_CONFIG={"netflix":{"email":"","password":"","profile_name":""},"disney_plus":{"email":"","password":"","profile_name":""}}
+STREAMING_PLATFORMS_FILE=config/streaming_platforms.local.json
+STREAMING_PLATFORM_CONFIG_FILE=config/streaming_platform_config.local.json
 ```
 
-`STREAMING_PLATFORMS` active ou désactive chaque plateforme. Une plateforme à
-`false` est ignorée par l'orchestrateur RPA, sauf si elle est retirée de la
-configuration plateforme.
+`STREAMING_PLATFORMS_FILE` pointe vers un JSON qui active ou désactive chaque
+plateforme. Une plateforme à `false` est ignorée par l'orchestrateur RPA, sauf
+si elle est explicitement demandée ailleurs.
 
-`STREAMING_PLATFORM_CONFIG` contient les informations de connexion RPA par
-plateforme:
+```json
+{
+  "crunchyroll": true,
+  "netflix": true,
+  "prime_video": true,
+  "disney_plus": true,
+  "canal_plus": true
+}
+```
+
+`STREAMING_PLATFORM_CONFIG_FILE` pointe vers un JSON contenant les informations
+de connexion RPA par plateforme:
 
 ```json
 {
@@ -111,14 +121,24 @@ plateforme:
 }
 ```
 
+Les deux fichiers d'exemple sont disponibles dans `config/` :
+
+- `config/streaming_platforms.example.json`
+- `config/streaming_platform_config.example.json`
+
+Copie-les en `.local.json` pour les valeurs réelles. Les fichiers `.local.json`
+sont ignorés par git.
+
 La clé canonique est `profile_name`. La variante `profil_name` est acceptée pour
 tolérer les anciennes saisies, mais la documentation utilise `profile_name`.
-Les anciennes variables `NETFLIX_EMAIL`, `NETFLIX_PASSWORD`,
-`NETFLIX_PROFILE_NAME`, etc. restent supportées en fallback pour ne pas casser
-les environnements existants. Les valeurs sensibles et les noms de profil ne
-sont pas écrits dans les logs. La connexion manuelle ne reste nécessaire que
-pour les validations interactives comme MFA, CAPTCHA ou approbation d'un nouvel
-appareil.
+Les variables compactes `STREAMING_PLATFORMS` et `STREAMING_PLATFORM_CONFIG`
+restent supportées, tout comme les anciennes variables `NETFLIX_EMAIL`,
+`NETFLIX_PASSWORD`, `NETFLIX_PROFILE_NAME`, etc. Ces fallbacks évitent de casser
+les environnements existants.
+
+Les valeurs sensibles et les noms de profil ne sont pas écrits dans les logs. La
+connexion manuelle ne reste nécessaire que pour les validations interactives
+comme MFA, CAPTCHA ou approbation d'un nouvel appareil.
 
 ## Securite et conformite
 

@@ -12,6 +12,9 @@ Le format suit l'esprit de [Keep a Changelog](https://keepachangelog.com/fr/1.1.
   `DEFAULT_PROFILE_KEY`.
 - Mapping JSON `STREAMING_PLATFORMS` et `STREAMING_PLATFORM_CONFIG` pour gérer
   l'activation, les credentials RPA et les profils par plateforme.
+- Fichiers JSON dédiés `STREAMING_PLATFORMS_FILE` et
+  `STREAMING_PLATFORM_CONFIG_FILE` pour garder une configuration plateformes
+  aérée et lisible.
 - Colonnes SQLite `profile_key` et `suitable_for_junior` pour les titres et les
   historiques.
 - Sélecteur de profil dans les vues web séries, films et calendrier.

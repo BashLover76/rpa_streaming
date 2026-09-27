@@ -1,0 +1,47 @@
+{
+  "crunchyroll": {
+    "email": "",
+    "password": "",
+    "profile_name": ""
+  },
+  "netflix": {
+    "email": "",
+    "password": "",
+    "profile_name": ""
+  },
+  "prime_video": {
+    "email": "",
+    "password": "",
+    "profile_name": ""
+  },
+  "disney_plus": {
+    "email": "",
+    "password": "",
+    "profile_name": ""
+  },
+  "canal_plus": {
+    "email": "",
+    "password": "",
+    "profile_name": ""
+  },
+  "apple_tv_plus": {
+    "email": "",
+    "password": "",
+    "profile_name": ""
+  },
+  "max": {
+    "email": "",
+    "password": "",
+    "profile_name": ""
+  },
+  "paramount_plus": {
+    "email": "",
+    "password": "",
+    "profile_name": ""
+  },
+  "ocs": {
+    "email": "",
+    "password": "",
+    "profile_name": ""
+  }
+}

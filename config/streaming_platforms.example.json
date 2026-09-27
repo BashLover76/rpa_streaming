@@ -1,0 +1,11 @@
+{
+  "crunchyroll": true,
+  "netflix": true,
+  "prime_video": true,
+  "disney_plus": true,
+  "canal_plus": true,
+  "apple_tv_plus": true,
+  "max": true,
+  "paramount_plus": true,
+  "ocs": true
+}

@@ -1,6 +1,8 @@
 .env
 .env.*
 !.env.example
+config/streaming_platforms.local.json
+config/streaming_platform_config.local.json
 .playwright-profile/
 artifacts/
 backups/
