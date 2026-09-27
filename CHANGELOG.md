@@ -2,7 +2,14 @@
 
 Tous les changements notables de ce projet sont documentés ici.
 
-Le format suit l'esprit de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet utilise un versionnement sémantique tagué.
+## [0.4.3] - 2026-09-27
+
+### Corrigé
+
+- Démarrage Docker web corrigé lorsque Docker Desktop/WSL expose le bind mount
+  config comme répertoire vide : l'image embarque désormais les fichiers de
+  configuration au lieu de les masquer par défaut.
+- Documentation et tags Docker alignés sur 0.4.3.
 
 ## [0.4.2] - 2026-09-27
 
