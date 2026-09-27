@@ -374,7 +374,8 @@ python tools/enriched_stats.py
 
 Le flux recommandé est maintenant le plus automatique possible:
 
-1. Renseigne `email`, `password` et `profile_name` dans `config/streaming_platform_config.local.json`.
+1. Renseigne `email`, `password`, `profile_name` et, si besoin, la matrice
+   `profiles` dans `config/streaming_platform_config.local.json`.
 2. Lance Chrome en CDP, ou laisse `main_ingestion.py` le démarrer si `RPA_CDP_URL` est défini.
 3. L'ingestion charge automatiquement l'extension locale au démarrage de Chrome et tente le login RPA sur chaque plateforme.
 4. Si une plateforme impose MFA, CAPTCHA ou validation appareil, termine cette étape dans Chrome; la session restera conservée ensuite.
@@ -396,6 +397,25 @@ Les artefacts de debug sont créés dans:
 
 ```text
 artifacts/rpa/<plateforme>/
+```
+
+Pour ingérer tous les profils applicatifs configurés et cliquer le bon profil
+dans chaque service de streaming:
+
+```bash
+python main_ingestion.py \
+  --cdp-url http://127.0.0.1:9222 \
+  --all-profiles \
+  --rpa-mode full
+```
+
+Pour ingérer un seul profil applicatif:
+
+```bash
+python main_ingestion.py \
+  --cdp-url http://127.0.0.1:9222 \
+  --profile-key junior \
+  --rpa-mode differential
 ```
 
 Tu y trouveras les captures PNG et les DOM HTML utilisés par le self-healing.

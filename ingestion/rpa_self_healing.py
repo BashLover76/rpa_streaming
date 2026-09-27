@@ -43,6 +43,8 @@ class PlatformConfig:
     scroll_wait_ms: int = 750
     content_type: str = "all"
     profile_name: str | None = None
+    profile_key: str | None = None
+    suitable_for_junior: bool = False
     login_url: str | None = None
 
     @classmethod
@@ -248,6 +250,7 @@ class SelfHealingRPA:
 
         self._optional_click(page, config, "cookie_accept")
         self._login_if_needed(page, config)
+        self._select_profile_if_needed(page, config)
         if config.name == "canal_plus":
             return self._run_canal_plus_platform(page, config)
         try:
@@ -304,6 +307,7 @@ class SelfHealingRPA:
             )
         for item in items:
             item.setdefault("platform", config.name)
+            self._apply_profile_metadata(item, config)
             if item.get("serie_title"):
                 if self.db.insert_history_item(item):
                     inserted += 1
@@ -315,11 +319,13 @@ class SelfHealingRPA:
             LOGGER.warning("canal_plus recently watched view unavailable; skipping")
             return 0
 
-        row_selector = config.selectors["history_rows"]
-        try:
-            page.wait_for_selector(row_selector, timeout=15_000)
-        except PlaywrightTimeoutError:
-            LOGGER.warning("canal_plus recently watched rows unavailable; skipping")
+        row_selector = self._canal_plus_history_selector(page, config)
+        if not row_selector:
+            _, dom_path = self._capture_state(page, config.name, "recently-watched-empty")
+            LOGGER.warning(
+                "canal_plus recently watched rows unavailable; saved DOM at %s",
+                dom_path,
+            )
             return 0
 
         rows_text = self._collect_canal_plus_history(page, config, row_selector)
@@ -334,10 +340,29 @@ class SelfHealingRPA:
         inserted = 0
         for item in items:
             item.setdefault("platform", config.name)
+            self._apply_profile_metadata(item, config)
             if item.get("serie_title") and self.db.insert_history_item(item):
                 inserted += 1
         LOGGER.info("RPA platform synced: %s, inserted=%s", config.name, inserted)
         return inserted
+
+    def _canal_plus_history_selector(
+        self, page: Page, config: PlatformConfig
+    ) -> str | None:
+        selectors = [
+            config.selectors["history_rows"],
+            "main a[href*='/series/'], main a[href*='/episode/'], main a[href*='/cinema/']",
+            "main a[href*='/film/'], main a[href*='/video/'], main article a[href]",
+            "main a[href][title], main [role='link'][href], main a[href]",
+        ]
+        for selector in selectors:
+            try:
+                page.wait_for_selector(selector, timeout=5_000)
+                LOGGER.info("canal_plus using history selector: %s", selector)
+                return selector
+            except PlaywrightTimeoutError:
+                continue
+        return None
 
     def _open_canal_recently_watched(
         self, page: Page, config: PlatformConfig
@@ -397,6 +422,36 @@ class SelfHealingRPA:
             LOGGER.info("canal_plus selected profile; url=%s title=%s", page.url, page.title())
             return
         LOGGER.warning("canal_plus profile selector is visible but no profile could be clicked")
+
+    def _select_profile_if_needed(self, page: Page, config: PlatformConfig) -> None:
+        if config.name == "canal_plus" or not config.profile_name:
+            return
+        selector = config.selectors.get("profile") or (
+            "button, a, [role='button'], [data-testid*='profile'], "
+            "[class*='profile'], [aria-label]"
+        )
+        if self._click_visible_by_text(page, selector, config.profile_name):
+            page.wait_for_load_state("domcontentloaded", timeout=20_000)
+            page.wait_for_timeout(2_000)
+            LOGGER.info(
+                "%s selected configured profile '%s'; url=%s title=%s",
+                config.name,
+                config.profile_name,
+                _safe_page_url(page.url),
+                page.title(),
+            )
+            return
+        LOGGER.info(
+            "%s profile '%s' not visible on current page; continuing with active session",
+            config.name,
+            config.profile_name,
+        )
+
+    @staticmethod
+    def _apply_profile_metadata(item: dict[str, Any], config: PlatformConfig) -> None:
+        if config.profile_key:
+            item["profile_key"] = config.profile_key
+            item["suitable_for_junior"] = config.suitable_for_junior
 
     @staticmethod
     def _click_visible_by_text(page: Page, selector: str | None, text: str) -> bool:

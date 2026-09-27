@@ -55,7 +55,7 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private static final int DEFAULT_PAGE_SIZE = 10;
-    private static final String APP_VERSION = "0.4.3";
+    private static final String APP_VERSION = "0.5.0";
 
     private final ExecutorService executor = Executors.newFixedThreadPool(3);
     private final List<Screen> backStack = new ArrayList<>();
@@ -526,6 +526,7 @@ public class MainActivity extends Activity {
         content.addView(syncStatus);
         addLanguageSettings();
         addProfileSettings();
+        addPlatformProfileSettings();
         addAdminSettings();
         addAdminKpis();
         addDebugLog();
@@ -610,6 +611,45 @@ public class MainActivity extends Activity {
             row.addView(button);
         }
         content.addView(row);
+    }
+
+    private void addPlatformProfileSettings() {
+        addSection(tr("streaming_profiles"));
+        LinearLayout panel = card();
+        JSONObject bootstrap = cachedJson("bootstrap");
+        JSONObject platformProfiles = bootstrap == null ? null : bootstrap.optJSONObject("platform_profiles");
+        if (platformProfiles == null || platformProfiles.length() == 0) {
+            panel.addView(line(tr("platform_profiles_empty")));
+            content.addView(panel);
+            return;
+        }
+        JSONArray platforms = platformProfiles.names();
+        if (platforms == null) {
+            panel.addView(line(tr("platform_profiles_empty")));
+            content.addView(panel);
+            return;
+        }
+        List<String> platformNames = new ArrayList<>();
+        for (int index = 0; index < platforms.length(); index++) {
+            platformNames.add(platforms.optString(index));
+        }
+        platformNames.sort(String::compareTo);
+        for (String platform : platformNames) {
+            panel.addView(titleText(platformLabel(platform), 16));
+            JSONArray profiles = platformProfiles.optJSONArray(platform);
+            if (profiles == null || profiles.length() == 0) {
+                panel.addView(line(tr("platform_profiles_empty")));
+                continue;
+            }
+            for (int index = 0; index < profiles.length(); index++) {
+                JSONObject profile = profiles.optJSONObject(index);
+                if (profile == null) continue;
+                String label = profile.optString("profile_label", profile.optString("profile_key"));
+                String name = profile.optString("platform_profile_name", "");
+                panel.addView(line(label + " -> " + (name.isEmpty() ? tr("not_configured") : name)));
+            }
+        }
+        content.addView(panel);
     }
 
     private void addAdminKpis() {
@@ -1005,6 +1045,7 @@ public class MainActivity extends Activity {
             case "movies_by_platform": return "Films par plateforme";
             case "next": return "Suivant";
             case "no_data": return "Aucune donnée.";
+            case "not_configured": return "Non configuré";
             case "no_sync_yet": return "Aucune synchro lancée depuis cette installation.";
             case "no_offline_data": return "Aucune donnée offline. Va dans Admin puis lance Synchro.";
             case "no_platform_link": return "Aucun lien plateforme disponible";
@@ -1031,6 +1072,8 @@ public class MainActivity extends Activity {
             case "series_by_platform": return "Séries par plateforme";
             case "server_connection": return "Connexion au serveur";
             case "stay": return "Rester";
+            case "streaming_profiles": return "Profils streaming";
+            case "platform_profiles_empty": return "Aucun profil de plateforme configuré.";
             case "sync_debug": return "Debug synchro";
             case "sync_done": return "Synchro terminée";
             case "sync_failed": return "Synchro impossible";
@@ -1063,6 +1106,7 @@ public class MainActivity extends Activity {
             case "movies_by_platform": return "Movies by platform";
             case "next": return "Next";
             case "no_data": return "No data.";
+            case "not_configured": return "Not configured";
             case "no_sync_yet": return "No sync has run on this installation.";
             case "no_offline_data": return "No offline data. Go to Admin and run Sync.";
             case "no_platform_link": return "No platform link available";
@@ -1089,6 +1133,8 @@ public class MainActivity extends Activity {
             case "series_by_platform": return "Series by platform";
             case "server_connection": return "Server connection";
             case "stay": return "Stay";
+            case "streaming_profiles": return "Streaming profiles";
+            case "platform_profiles_empty": return "No platform profile configured.";
             case "sync_debug": return "Sync debug";
             case "sync_done": return "Sync complete";
             case "sync_failed": return "Sync failed";
@@ -1121,6 +1167,7 @@ public class MainActivity extends Activity {
             case "movies_by_platform": return "Películas por plataforma";
             case "next": return "Siguiente";
             case "no_data": return "Sin datos.";
+            case "not_configured": return "No configurado";
             case "no_sync_yet": return "No se ha lanzado ninguna synchro en esta instalación.";
             case "no_offline_data": return "Sin datos offline. Ve a Admin y lanza Synchro.";
             case "no_platform_link": return "Sin enlace de plataforma disponible";
@@ -1147,6 +1194,8 @@ public class MainActivity extends Activity {
             case "series_by_platform": return "Series por plataforma";
             case "server_connection": return "Conexión al servidor";
             case "stay": return "Quedarse";
+            case "streaming_profiles": return "Perfiles streaming";
+            case "platform_profiles_empty": return "Ningún perfil de plataforma configurado.";
             case "sync_debug": return "Debug de sincronización";
             case "sync_done": return "Synchro terminada";
             case "sync_failed": return "Synchro imposible";

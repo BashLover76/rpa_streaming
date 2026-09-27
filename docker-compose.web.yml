@@ -1,6 +1,6 @@
 services:
   streaming-web:
-    image: ${STREAMING_WEB_IMAGE:-rpa-streaming-web}:${STREAMING_WEB_TAG:-0.4.3}
+    image: ${STREAMING_WEB_IMAGE:-rpa-streaming-web}:${STREAMING_WEB_TAG:-0.5.0}
     build:
       context: .
       dockerfile: Dockerfile.web
@@ -19,6 +19,7 @@ services:
       RPA_CDP_URL: ${RPA_CDP_URL_DOCKER:-http://host.docker.internal:9222}
     volumes:
       - streaming-web-data:/data
+      - streaming-web-config:/app/config
       - streaming-web-state:/app/.continue
       - streaming-web-logs:/app/logs
       - /var/run/docker.sock:/var/run/docker.sock
@@ -28,5 +29,8 @@ services:
 volumes:
   streaming-web-data:
     name: rpa_streaming_streaming-web-data
+  streaming-web-config:
+    external: true
+    name: rpa_streaming_streaming-web-config
   streaming-web-state:
   streaming-web-logs:

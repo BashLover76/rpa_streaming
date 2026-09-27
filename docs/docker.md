@@ -6,6 +6,7 @@ déclencher des jobs RPA Docker séparés qui appellent `main_ingestion.py`.
 ## Lancement
 
 ```bash
+python tools/sync_config_to_docker_volume.py
 docker compose --env-file .env -f docker-compose.web.yml up -d --build
 python tools/sync_db_to_web_container.py --restart
 ```
@@ -17,17 +18,17 @@ La web app écoute sur `http://localhost:5000` par défaut.
 Les images Docker sont taguées explicitement. Les valeurs par défaut sont :
 
 ```text
-rpa-streaming-web:0.4.3
-rpa-streaming-rpa:0.4.3
+rpa-streaming-web:0.5.0
+rpa-streaming-rpa:0.5.0
 ```
 
 Tu peux surcharger les noms ou tags via `.env` :
 
 ```env
 STREAMING_WEB_IMAGE=rpa-streaming-web
-STREAMING_WEB_TAG=0.4.3
+STREAMING_WEB_TAG=0.5.0
 STREAMING_RPA_IMAGE=rpa-streaming-rpa
-STREAMING_RPA_TAG=0.4.3
+STREAMING_RPA_TAG=0.5.0
 ```
 
 Pour reconstruire une version précise :
@@ -72,6 +73,20 @@ streaming-web-data:/data
 ```
 
 La variable interne `STREAMING_DB_PATH` vaut `/data/streaming.db`.
+Les fichiers de configuration locaux sont copiés dans un volume Docker nommé :
+
+```text
+streaming-web-config:/app/config
+```
+
+Ils restent exclus du contexte de build Docker via `.dockerignore`; ils ne sont
+donc pas copiés dans les images. Après une modification de `config/*.local.json`,
+resynchronise ce volume :
+
+```bash
+python tools/sync_config_to_docker_volume.py
+docker restart streaming-web
+```
 
 Sous certaines intégrations Docker Desktop + WSL, les bind mounts de fichiers
 WSL sont exposés comme des dossiers vides. Le compose utilise donc un volume

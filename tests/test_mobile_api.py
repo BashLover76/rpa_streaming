@@ -57,6 +57,9 @@ class MobileApiTests(unittest.TestCase):
             ),
         }
         app.config["DEFAULT_PROFILE_KEY"] = "default"
+        app.config["STREAMING_PLATFORM_PROFILES"] = {
+            "crunchyroll": {"default": "Profil principal", "junior": "Kids"}
+        }
         self.client = app.test_client()
 
     def test_mobile_titles_expose_deep_links(self):
@@ -123,6 +126,10 @@ class MobileApiTests(unittest.TestCase):
         self.assertEqual(
             [profile["key"] for profile in payload["profiles"]],
             ["default", "junior"],
+        )
+        self.assertEqual(
+            payload["platform_profiles"]["crunchyroll"][0]["platform_profile_name"],
+            "Profil principal",
         )
 
 

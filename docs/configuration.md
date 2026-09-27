@@ -167,10 +167,22 @@ de connexion RPA par plateforme:
   "netflix": {
     "email": "user@example.test",
     "password": "mot_de_passe",
-    "profile_name": "Profil affiché"
+    "profile_name": "Profil affiché",
+    "profiles": {
+      "default": "Profil adulte sur Netflix",
+      "junior": "Profil enfant sur Netflix"
+    }
   }
 }
 ```
+
+- `profile_name` reste le profil plateforme utilisé par défaut pour le profil
+  applicatif par défaut.
+- `profiles` permet de mapper chaque profil applicatif vers le nom exact à
+  sélectionner dans l'écran de profil de la plateforme. Les clés doivent
+  correspondre aux clés déclarées dans `config/streaming_profiles.local.json`.
+- Si `profiles.default` est absent, `profile_name` est utilisé pour le profil
+  applicatif par défaut.
 
 Les deux fichiers d'exemple sont disponibles dans `config/` :
 
