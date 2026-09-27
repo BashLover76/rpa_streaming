@@ -2,7 +2,22 @@
 
 Tous les changements notables de ce projet sont documentés ici.
 
-Le format suit l'esprit de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet utilise pour l'instant un versionnement interne non tagué.
+Le format suit l'esprit de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet utilise un versionnement sémantique tagué.
+
+## [0.4.1] - 2026-09-27
+
+### Corrigé
+
+- Tri API/mobile des séries et films par vraie date de visionnage uniquement :
+  les valeurs invalides comme `unknown` ou `YYYY-MM-DD` ne passent plus devant
+  les derniers visionnages Crunchyroll.
+- Sélection de profil mobile : un profil local obsolète est remplacé par le
+  profil par défaut exposé par le serveur, puis par le premier profil disponible
+  si nécessaire.
+- Cache mobile des listes et calendriers séparé par profil pour éviter les
+  mélanges de flux après synchronisation.
+- Écran Admin Android : ajout d'un chargement direct du bootstrap quand les
+  profils ne sont pas encore présents dans le cache offline.
 
 ## [0.4.0] - 2026-09-27
 

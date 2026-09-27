@@ -44,6 +44,10 @@ VALID_SERIES_TITLE_SQL = (
     "NOT (s.titre LIKE '__/__/%' OR s.titre LIKE '%Report a problem%') "
     "AND COALESCE(LOWER(s.imdb_kind), '') NOT IN ('movie', 'film')"
 )
+VALID_HISTORY_DATE_SQL = (
+    "CASE WHEN h.date_vu GLOB '????-??-??*' "
+    "AND DATE(h.date_vu) <= DATE('now') THEN DATE(h.date_vu) END"
+)
 
 PLATFORM_MARKS = {
     "canal_plus": "C+",
@@ -766,6 +770,10 @@ def profile_options() -> list[dict[str, Any]]:
 def resolve_profile() -> dict[str, Any]:
     profiles = current_app.config.get("STREAMING_PROFILES", {})
     default_key = current_app.config.get("DEFAULT_PROFILE_KEY")
+    if not profiles:
+        abort(500, description="Aucun profil applicatif n'est configuré.")
+    if default_key not in profiles:
+        default_key = next(iter(profiles))
     requested = request.args.get("profile") or request.cookies.get("streaming_profile")
     key = requested if requested in profiles else default_key
     profile = profiles[key]
@@ -853,13 +861,21 @@ def fetch_movies(
             s.imdb_rating,
             s.runtime_minutes,
             COUNT(DISTINCT h.id) AS history_count,
-            MAX(h.date_vu) AS last_watched_at
+            MAX({VALID_HISTORY_DATE_SQL}) AS last_watched_at,
+            MAX(h.created_at) AS last_history_imported_at
         FROM series AS s
         LEFT JOIN history AS h ON h.serie_id = s.id
         WHERE {' AND '.join(where)}
         GROUP BY s.id
         ORDER BY
-            COALESCE(MAX(h.date_vu), s.updated_at, s.last_updated_at, s.titre) DESC,
+            (last_watched_at IS NOT NULL) DESC,
+            last_watched_at DESC,
+            COALESCE(
+                last_history_imported_at,
+                s.updated_at,
+                s.last_updated_at,
+                s.titre
+            ) DESC,
             s.id DESC
         """ + (" LIMIT ? OFFSET ?" if limit is not None else ""),
             params + ([limit, offset] if limit is not None else []),
@@ -965,7 +981,7 @@ def fetch_admin_movies(search_term: str = "") -> list[dict[str, Any]]:
             s.titre,
             COALESCE(s.plateforme, 'unknown') AS platform,
             COUNT(DISTINCT h.id) AS history_count,
-            MAX(h.date_vu) AS last_watched_at
+            MAX({VALID_HISTORY_DATE_SQL}) AS last_watched_at
         FROM series AS s
         LEFT JOIN history AS h ON h.serie_id = s.id
         WHERE {' AND '.join(filters)}
@@ -1208,7 +1224,7 @@ def fetch_recent_titles_for_platform(
     rows = (
         get_db()
         .execute(
-            """
+            f"""
         SELECT
             s.id,
             s.titre,
@@ -1216,7 +1232,7 @@ def fetch_recent_titles_for_platform(
             s.imdb_kind,
             s.updated_at,
             s.poster_url,
-            MAX(h.date_vu) AS last_watched_at,
+            MAX({VALID_HISTORY_DATE_SQL}) AS last_watched_at,
             COUNT(DISTINCT h.id) AS history_count
         FROM series AS s
         LEFT JOIN history AS h ON h.serie_id = s.id
@@ -1425,14 +1441,22 @@ def search_series(
             COUNT(DISTINCT c.saison) AS seasons_count_local,
             COUNT(DISTINCT CASE WHEN c.episode IS NOT NULL THEN c.id END) AS episodes_count_local,
             MIN(CASE WHEN c.date_diffusion >= DATE('now') THEN c.date_diffusion END) AS next_air_date,
-            MAX(h.date_vu) AS last_watched_at
+            MAX({VALID_HISTORY_DATE_SQL}) AS last_watched_at,
+            MAX(h.created_at) AS last_history_imported_at
         FROM series s
         LEFT JOIN history h ON h.serie_id = s.id
         LEFT JOIN calendar c ON c.serie_id = s.id
         {where_sql}
         GROUP BY s.id
         ORDER BY
-            COALESCE(last_watched_at, s.updated_at, s.last_updated_at, '') DESC,
+            (last_watched_at IS NOT NULL) DESC,
+            last_watched_at DESC,
+            COALESCE(
+                last_history_imported_at,
+                s.updated_at,
+                s.last_updated_at,
+                ''
+            ) DESC,
             s.id DESC
         """ + (" LIMIT ? OFFSET ?" if limit is not None else ""),
             params + ([limit, offset] if limit is not None else []),
@@ -1543,7 +1567,7 @@ def fetch_series(series_id: int) -> dict[str, Any] | None:
     row = (
         get_db()
         .execute(
-            """
+            f"""
         SELECT
             s.*,
             COALESCE(s.plateforme, 'unknown') AS platform,
@@ -1551,7 +1575,8 @@ def fetch_series(series_id: int) -> dict[str, Any] | None:
             COUNT(DISTINCT CASE WHEN h.sync_status = 'synced' THEN h.id END) AS synced_count,
             COUNT(DISTINCT CASE WHEN h.sync_status = 'matched' THEN h.id END) AS matched_count,
             COUNT(DISTINCT c.id) AS calendar_count,
-            MAX(h.date_vu) AS last_watched_at,
+            MAX({VALID_HISTORY_DATE_SQL}) AS last_watched_at,
+            MAX(h.created_at) AS last_history_imported_at,
             MIN(CASE WHEN c.date_diffusion >= DATE('now') THEN c.date_diffusion END) AS next_air_date
         FROM series s
         LEFT JOIN history h ON h.serie_id = s.id
@@ -1734,7 +1759,12 @@ def fetch_history(series_id: int) -> list[dict[str, Any]]:
         FROM history AS h
         JOIN series AS s ON s.id = h.serie_id
         WHERE h.serie_id = ?
-        ORDER BY date_vu DESC, (saison IS NOT NULL) DESC, (sync_status = 'synced') DESC, created_at DESC, id DESC
+        ORDER BY
+            CASE WHEN date_vu GLOB '????-??-??*' THEN DATE(date_vu) END DESC,
+            created_at DESC,
+            (saison IS NOT NULL) DESC,
+            (sync_status = 'synced') DESC,
+            id DESC
         """,
             (series_id,),
         )
@@ -1956,7 +1986,10 @@ def fetch_deep_link_url(series_id: int, *, platform: str | None = None) -> str |
         SELECT episode_url
         FROM history
         WHERE serie_id = ? AND episode_url IS NOT NULL AND episode_url != ''
-        ORDER BY date_vu DESC, created_at DESC, id DESC
+        ORDER BY
+            CASE WHEN date_vu GLOB '????-??-??*' THEN DATE(date_vu) END DESC,
+            created_at DESC,
+            id DESC
         LIMIT 1
         """,
             (series_id,),
