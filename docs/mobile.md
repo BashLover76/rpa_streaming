@@ -4,7 +4,7 @@ Le dossier `android/` contient l'application Android native `StreamPilot`.
 Elle consomme l'API web du serveur local, fonctionne offline après synchronisation
 et ne lance pas le RPA.
 
-Version actuelle : `0.4.1`. Le numéro de version est visible dans l'écran
+Version actuelle : `0.4.2`. Le numéro de version est visible dans l'écran
 `Admin` de l'application.
 
 ## Synchronisation avec le serveur local
@@ -107,10 +107,13 @@ Android transmet ces liens au système avec `Intent.ACTION_VIEW`. Si l'applicati
 Depuis une machine avec Android Studio ou le SDK Android :
 
 ```bash
-export ANDROID_HOME="$PWD/android-sdk"
-export ANDROID_SDK_ROOT="$PWD/android-sdk"
-.local/gradle/gradle-8.10.2/bin/gradle -p android :app:assembleDebug
+cd android
+./gradlew :app:assembleDebug
 ```
+
+Le wrapper utilise Gradle `8.10.2`. Si le SDK Android est installé dans le
+projet, `android/local.properties` peut contenir
+`sdk.dir=/chemin/vers/rpa_streaming/android-sdk`.
 
 Si tu utilises Android Studio, ouvre le dossier `android/` puis lance la configuration `app`.
 

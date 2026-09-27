@@ -4,6 +4,22 @@ Tous les changements notables de ce projet sont documentés ici.
 
 Le format suit l'esprit de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet utilise un versionnement sémantique tagué.
 
+## [0.4.2] - 2026-09-27
+
+### Corrigé
+
+- Recherche mobile offline rendue réactive : les listes séries, films,
+  calendrier et reprise se filtrent dès la saisie.
+- Chargement automatique des profils dans l'écran Admin Android quand le
+  bootstrap n'est pas encore présent dans le cache local.
+- Protection contre les doubles chargements de bootstrap pendant la récupération
+  des profils.
+
+### Ajouté
+
+- Wrapper Gradle Android `8.10.2` versionné pour produire l'APK sans dépendre du
+  `gradle` système installé sur la machine.
+
 ## [0.4.1] - 2026-09-27
 
 ### Corrigé
