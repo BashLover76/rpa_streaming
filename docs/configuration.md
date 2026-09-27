@@ -40,38 +40,94 @@ Variables communes:
 | Variable | Usage |
 | --- | --- |
 | `STREAMING_DB_PATH` | Chemin SQLite, par défaut `streaming.db` |
-| `OLLAMA_BASE_URL` | URL Ollama locale |
-| `OLLAMA_MODEL` | Modèle vision/chat utilisé |
 | `RPA_USER_DATA_DIR` | Profil Chromium persistant |
 | `PLATFORM_CONFIG_PATH` | Index ou fichier plateforme |
 | `RPA_BROWSER_EXTENSION_PATH` | Extension helper locale |
+| `BETASERIES_CONFIG_FILE` | Fichier JSON BetaSeries |
+| `OLLAMA_CONFIG_FILE` | Fichier JSON Ollama |
+| `CRUNCHYROLL_CONFIG_FILE` | Fichier JSON Crunchyroll |
+| `STREAMING_PROFILES_FILE` | Fichier JSON profils applicatifs |
+
+## Fichiers de configuration services
+
+Les secrets et paramètres longs sont stockés dans des fichiers JSON lisibles.
+Les fichiers `.example.json` sont versionnés. Copie-les en `.local.json` pour
+tes valeurs réelles, puis pointe `.env` vers ces fichiers locaux.
+
+```text
+BETASERIES_CONFIG_FILE=config/betaseries.local.json
+OLLAMA_CONFIG_FILE=config/ollama.local.json
+CRUNCHYROLL_CONFIG_FILE=config/crunchyroll.local.json
+STREAMING_PROFILES_FILE=config/streaming_profiles.local.json
+```
+
+Exemple BetaSeries:
+
+```json
+{
+  "api_key": "your_betaseries_api_key",
+  "client_secret": "your_oauth2_key_or_secret_key",
+  "access_token": "",
+  "user_id": ""
+}
+```
+
+Exemple Ollama:
+
+```json
+{
+  "model": "gemma3:4b",
+  "base_url": "http://localhost:11434",
+  "num_ctx": 32768,
+  "num_predict": 4096,
+  "timeout": 300
+}
+```
+
+Exemple Crunchyroll:
+
+```json
+{
+  "email": "",
+  "password": "",
+  "authorization": "",
+  "profile_id": "",
+  "locale": "fr-FR"
+}
+```
 
 ## Profils applicatifs
 
 Les profils utilisés par le web, l'API mobile et l'ingestion sont configurés
-dans `.env`. Le code ne doit jamais contenir de nom de profil nominatif en dur.
+dans `STREAMING_PROFILES_FILE`. Le code ne doit jamais contenir de nom de profil
+nominatif en dur.
 
-```text
-STREAMING_PROFILES=default|Profil principal|default|false;junior|Profil junior|junior|true
-DEFAULT_PROFILE_KEY=default
+```json
+{
+  "default_profile_key": "default",
+  "profiles": {
+    "default": {
+      "label": "Profil principal",
+      "technical_id": "default",
+      "is_junior": false
+    },
+    "junior": {
+      "label": "Profil junior",
+      "technical_id": "junior",
+      "is_junior": true
+    }
+  }
+}
 ```
 
-Format de `STREAMING_PROFILES` :
-
-```text
-cle|libelle affichage|identifiant technique|profil junior
-```
-
-- `cle` : clé stable envoyée par les interfaces et stockée dans SQLite.
-- `libelle affichage` : texte affiché dans les sélecteurs web/mobile.
-- `identifiant technique` : valeur libre pour faire le lien avec une plateforme
+- `default_profile_key` : profil appliqué automatiquement au démarrage.
+- `label` : texte affiché dans les sélecteurs web/mobile.
+- `technical_id` : valeur libre pour faire le lien avec une plateforme
   ou un annuaire si nécessaire.
-- `profil junior` : `true`, `false`, `1`, `0`, `yes` ou `no`.
+- `is_junior` : active le filtre junior.
 
-`DEFAULT_PROFILE_KEY` doit pointer vers une entrée de la matrice. Si la variable
-est absente, le premier profil de la matrice est utilisé. Les historiques ingérés
-reçoivent ce profil par défaut, puis les vues peuvent filtrer dynamiquement par
-profil. Un profil marqué junior applique aussi le filtre `suitable_for_junior`.
+Les anciennes variables `STREAMING_PROFILES` et `DEFAULT_PROFILE_KEY` restent
+supportées en fallback.
 
 Variables API:
 
@@ -139,6 +195,33 @@ les environnements existants.
 Les valeurs sensibles et les noms de profil ne sont pas écrits dans les logs. La
 connexion manuelle ne reste nécessaire que pour les validations interactives
 comme MFA, CAPTCHA ou approbation d'un nouvel appareil.
+
+## Structure recommandée du `.env`
+
+Le `.env` local est volontairement court et structuré par sections:
+
+```text
+# -----------------------------------------------------------------------------
+# Core runtime
+# -----------------------------------------------------------------------------
+STREAMING_DB_PATH=streaming.db
+RPA_USER_DATA_DIR=.playwright-profile
+ADMIN_TOKEN=...
+
+# -----------------------------------------------------------------------------
+# Service configs
+# -----------------------------------------------------------------------------
+BETASERIES_CONFIG_FILE=config/betaseries.local.json
+OLLAMA_CONFIG_FILE=config/ollama.local.json
+CRUNCHYROLL_CONFIG_FILE=config/crunchyroll.local.json
+STREAMING_PROFILES_FILE=config/streaming_profiles.local.json
+
+# -----------------------------------------------------------------------------
+# Streaming platform activation and RPA login config
+# -----------------------------------------------------------------------------
+STREAMING_PLATFORMS_FILE=config/streaming_platforms.local.json
+STREAMING_PLATFORM_CONFIG_FILE=config/streaming_platform_config.local.json
+```
 
 ## Securite et conformite
 

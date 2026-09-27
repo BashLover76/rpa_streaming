@@ -40,6 +40,7 @@ services:
       - rpa-logs:/app/logs
       - rpa-artifacts:/app/artifacts
       - rpa-backups:/app/backups
+      - ./config:/app/config:ro
 
 volumes:
   streaming-web-data:

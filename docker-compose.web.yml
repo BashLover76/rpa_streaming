@@ -21,6 +21,7 @@ services:
       - streaming-web-data:/data
       - streaming-web-state:/app/.continue
       - streaming-web-logs:/app/logs
+      - ./config:/app/config:ro
       - /var/run/docker.sock:/var/run/docker.sock
     extra_hosts:
       - "host.docker.internal:host-gateway"

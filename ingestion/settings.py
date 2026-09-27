@@ -50,6 +50,9 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         extension_path = os.getenv("RPA_BROWSER_EXTENSION_PATH", "").strip()
+        betaseries = _load_betaseries_config()
+        ollama = _load_ollama_config()
+        crunchyroll = _load_crunchyroll_config()
         profiles = _load_profiles_from_env()
         default_profile_key = _load_default_profile_key(profiles)
         platform_config = _load_streaming_platform_config()
@@ -57,18 +60,15 @@ class Settings:
         credentials = _credentials_from_platform_config(platform_config)
         profile_names = _profile_names_from_platform_config(platform_config)
         return cls(
-            betaseries_api_key=os.getenv("BETASERIES_API_KEY", ""),
-            betaseries_client_secret=os.getenv(
-                "BETASERIES_CLIENT_SECRET",
-                os.getenv("BETASERIES_OAUTH2_KEY", ""),
-            ),
-            betaseries_access_token=os.getenv("BETASERIES_ACCESS_TOKEN", ""),
-            betaseries_user_id=os.getenv("BETASERIES_USER_ID", ""),
-            ollama_model=os.getenv("OLLAMA_MODEL", "gemma3:4b"),
-            ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-            ollama_num_ctx=int(os.getenv("OLLAMA_NUM_CTX", "32768")),
-            ollama_num_predict=int(os.getenv("OLLAMA_NUM_PREDICT", "4096")),
-            ollama_timeout=float(os.getenv("OLLAMA_TIMEOUT", "300")),
+            betaseries_api_key=betaseries["api_key"],
+            betaseries_client_secret=betaseries["client_secret"],
+            betaseries_access_token=betaseries["access_token"],
+            betaseries_user_id=betaseries["user_id"],
+            ollama_model=ollama["model"],
+            ollama_base_url=ollama["base_url"],
+            ollama_num_ctx=int(ollama["num_ctx"]),
+            ollama_num_predict=int(ollama["num_predict"]),
+            ollama_timeout=float(ollama["timeout"]),
             db_path=Path(os.getenv("STREAMING_DB_PATH", "streaming.db")),
             rpa_user_data_dir=Path(
                 os.getenv("RPA_USER_DATA_DIR", ".playwright-profile")
@@ -80,17 +80,78 @@ class Settings:
             rpa_cdp_url=os.getenv("RPA_CDP_URL", "").strip(),
             rpa_cdp_timeout_ms=int(os.getenv("RPA_CDP_TIMEOUT_MS", "30000")),
             admin_token=os.getenv("ADMIN_TOKEN", "").strip(),
-            crunchyroll_email=os.getenv("CRUNCHYROLL_EMAIL", ""),
-            crunchyroll_password=os.getenv("CRUNCHYROLL_PASSWORD", ""),
-            crunchyroll_authorization=os.getenv("CRUNCHYROLL_AUTHORIZATION", ""),
-            crunchyroll_profile_id=os.getenv("CRUNCHYROLL_PROFILE_ID", ""),
-            crunchyroll_locale=os.getenv("CRUNCHYROLL_LOCALE", "fr-FR"),
+            crunchyroll_email=crunchyroll["email"],
+            crunchyroll_password=crunchyroll["password"],
+            crunchyroll_authorization=crunchyroll["authorization"],
+            crunchyroll_profile_id=crunchyroll["profile_id"],
+            crunchyroll_locale=crunchyroll["locale"],
             rpa_credentials=credentials,
             rpa_profile_names=profile_names,
             streaming_platforms=streaming_platforms,
             profiles=profiles,
             default_profile_key=default_profile_key,
         )
+
+
+def _load_betaseries_config() -> dict[str, str]:
+    fallback = {
+        "api_key": os.getenv("BETASERIES_API_KEY", ""),
+        "client_secret": os.getenv(
+            "BETASERIES_CLIENT_SECRET",
+            os.getenv("BETASERIES_OAUTH2_KEY", ""),
+        ),
+        "access_token": os.getenv("BETASERIES_ACCESS_TOKEN", ""),
+        "user_id": os.getenv("BETASERIES_USER_ID", ""),
+    }
+    return _load_named_config(
+        os.getenv("BETASERIES_CONFIG_FILE", "").strip(),
+        "BETASERIES_CONFIG_FILE",
+        fallback,
+    )
+
+
+def _load_ollama_config() -> dict[str, str]:
+    fallback = {
+        "model": os.getenv("OLLAMA_MODEL", "gemma3:4b"),
+        "base_url": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+        "num_ctx": os.getenv("OLLAMA_NUM_CTX", "32768"),
+        "num_predict": os.getenv("OLLAMA_NUM_PREDICT", "4096"),
+        "timeout": os.getenv("OLLAMA_TIMEOUT", "300"),
+    }
+    return _load_named_config(
+        os.getenv("OLLAMA_CONFIG_FILE", "").strip(),
+        "OLLAMA_CONFIG_FILE",
+        fallback,
+    )
+
+
+def _load_crunchyroll_config() -> dict[str, str]:
+    fallback = {
+        "email": os.getenv("CRUNCHYROLL_EMAIL", ""),
+        "password": os.getenv("CRUNCHYROLL_PASSWORD", ""),
+        "authorization": os.getenv("CRUNCHYROLL_AUTHORIZATION", ""),
+        "profile_id": os.getenv("CRUNCHYROLL_PROFILE_ID", ""),
+        "locale": os.getenv("CRUNCHYROLL_LOCALE", "fr-FR"),
+    }
+    return _load_named_config(
+        os.getenv("CRUNCHYROLL_CONFIG_FILE", "").strip(),
+        "CRUNCHYROLL_CONFIG_FILE",
+        fallback,
+    )
+
+
+def _load_named_config(
+    raw_path: str,
+    variable_name: str,
+    fallback: dict[str, str],
+) -> dict[str, str]:
+    loaded = _load_json_file_object(raw_path, variable_name)
+    if loaded is None:
+        return fallback
+    values = dict(fallback)
+    for key, value in loaded.items():
+        values[str(key)] = "" if value is None else str(value)
+    return values
 
 
 PLATFORM_ENV_PREFIXES = {
@@ -221,6 +282,15 @@ def _load_json_file_object(
 
 
 def _load_profiles_from_env() -> dict[str, StreamingProfile]:
+    file_profiles = _load_json_file_object(
+        os.getenv("STREAMING_PROFILES_FILE", "").strip(),
+        "STREAMING_PROFILES_FILE",
+    )
+    if file_profiles is not None:
+        profiles = _parse_profiles_json(file_profiles)
+        if profiles:
+            return profiles
+
     raw_profiles = os.getenv("STREAMING_PROFILES", "").strip()
     if raw_profiles:
         profiles = _parse_profile_matrix(raw_profiles)
@@ -238,6 +308,29 @@ def _load_profiles_from_env() -> dict[str, StreamingProfile]:
             is_junior=_env_bool("DEFAULT_PROFILE_IS_JUNIOR"),
         )
     }
+
+
+def _parse_profiles_json(raw_profiles: dict[str, object]) -> dict[str, StreamingProfile]:
+    profiles_payload = raw_profiles.get("profiles")
+    if isinstance(profiles_payload, dict):
+        raw_profiles = profiles_payload
+
+    profiles: dict[str, StreamingProfile] = {}
+    for key, raw_profile in raw_profiles.items():
+        if not isinstance(raw_profile, dict):
+            continue
+        profile_key = str(raw_profile.get("key") or key)
+        profiles[profile_key] = StreamingProfile(
+            key=profile_key,
+            label=str(raw_profile.get("label") or profile_key),
+            technical_id=str(
+                raw_profile.get("technical_id")
+                or raw_profile.get("id")
+                or profile_key
+            ),
+            is_junior=_parse_bool(str(raw_profile.get("is_junior") or "")),
+        )
+    return profiles
 
 
 def _parse_profile_matrix(raw_profiles: str) -> dict[str, StreamingProfile]:
@@ -260,6 +353,24 @@ def _parse_profile_matrix(raw_profiles: str) -> dict[str, StreamingProfile]:
 
 
 def _load_default_profile_key(profiles: dict[str, StreamingProfile]) -> str:
+    profiles_config = _load_json_file_object(
+        os.getenv("STREAMING_PROFILES_FILE", "").strip(),
+        "STREAMING_PROFILES_FILE",
+    )
+    if profiles_config is not None:
+        requested = str(profiles_config.get("default_profile_key") or "").strip()
+        if requested and requested in profiles:
+            return requested
+
+    requested_config = _load_json_file_object(
+        os.getenv("STREAMING_PROFILE_DEFAULTS_FILE", "").strip(),
+        "STREAMING_PROFILE_DEFAULTS_FILE",
+    )
+    if requested_config is not None:
+        requested = str(requested_config.get("default_profile_key") or "").strip()
+        if requested and requested in profiles:
+            return requested
+
     requested = os.getenv("DEFAULT_PROFILE_KEY", "").strip()
     if requested and requested in profiles:
         return requested

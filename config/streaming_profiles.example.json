@@ -1,0 +1,15 @@
+{
+  "default_profile_key": "default",
+  "profiles": {
+    "default": {
+      "label": "Profil principal",
+      "technical_id": "default",
+      "is_junior": false
+    },
+    "junior": {
+      "label": "Profil junior",
+      "technical_id": "junior",
+      "is_junior": true
+    }
+  }
+}

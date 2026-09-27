@@ -1,0 +1,7 @@
+{
+  "model": "gemma3:4b",
+  "base_url": "http://localhost:11434",
+  "num_ctx": 32768,
+  "num_predict": 4096,
+  "timeout": 300
+}

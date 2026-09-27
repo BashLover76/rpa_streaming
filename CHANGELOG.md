@@ -15,6 +15,8 @@ Le format suit l'esprit de [Keep a Changelog](https://keepachangelog.com/fr/1.1.
 - Fichiers JSON dédiés `STREAMING_PLATFORMS_FILE` et
   `STREAMING_PLATFORM_CONFIG_FILE` pour garder une configuration plateformes
   aérée et lisible.
+- Fichiers JSON dédiés BetaSeries, Ollama, Crunchyroll et profils applicatifs
+  pour éviter les longues variables `.env`.
 - Colonnes SQLite `profile_key` et `suitable_for_junior` pour les titres et les
   historiques.
 - Sélecteur de profil dans les vues web séries, films et calendrier.
@@ -31,6 +33,8 @@ Le format suit l'esprit de [Keep a Changelog](https://keepachangelog.com/fr/1.1.
   valeur nominative hardcodée.
 - Le compose RPA lit maintenant `.env` et transmet la configuration JSON des
   plateformes au conteneur.
+- Les compose web/RPA montent `./config` en lecture seule pour lire les fichiers
+  `.local.json` sans les intégrer aux images Docker.
 
 ## [0.3.0] - 2026-09-26
 
