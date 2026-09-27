@@ -12,6 +12,8 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.text.method.DigitsKeyListener;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
@@ -53,7 +55,7 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private static final int DEFAULT_PAGE_SIZE = 10;
-    private static final String APP_VERSION = "0.4.1";
+    private static final String APP_VERSION = "0.4.2";
 
     private final ExecutorService executor = Executors.newFixedThreadPool(3);
     private final List<Screen> backStack = new ArrayList<>();
@@ -79,6 +81,7 @@ public class MainActivity extends Activity {
     private String sortMode = "recent";
     private String language = "fr";
     private String activeProfileKey = "";
+    private boolean bootstrapRefreshInFlight = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -127,6 +130,22 @@ public class MainActivity extends Activity {
         searchInput = new EditText(this);
         searchInput.setHint(tr("search_offline"));
         styleInput(searchInput);
+        searchInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence value, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence value, int start, int before, int count) {
+                if (currentScreen != null && !"admin".equals(currentScreen.kind)) {
+                    render(currentScreen.withPage(0));
+                }
+            }
+
+            @Override
+            public void afterTextChanged(Editable value) {
+            }
+        });
         root.addView(searchInput, matchWrap());
 
         tabs = new LinearLayout(this);
@@ -569,6 +588,9 @@ public class MainActivity extends Activity {
             reload.setOnClickListener(v -> refreshBootstrapOnly());
             row.addView(reload);
             content.addView(row);
+            if (!bootstrapRefreshInFlight) {
+                refreshBootstrapOnly();
+            }
             return;
         }
         applyDefaultProfileFromBootstrap(bootstrap);
@@ -703,6 +725,8 @@ public class MainActivity extends Activity {
 
     private void refreshBootstrapOnly() {
         prefs.edit().putString("server_url", normalizedServerUrl()).apply();
+        if (bootstrapRefreshInFlight) return;
+        bootstrapRefreshInFlight = true;
         progress.setVisibility(ProgressBar.VISIBLE);
         executor.submit(() -> {
             try {
@@ -710,11 +734,13 @@ public class MainActivity extends Activity {
                 applyDefaultProfileFromBootstrap(bootstrap);
                 writeCacheJson("bootstrap", bootstrap);
                 runOnUiThread(() -> {
+                    bootstrapRefreshInFlight = false;
                     progress.setVisibility(ProgressBar.GONE);
                     render(Screen.admin());
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
+                    bootstrapRefreshInFlight = false;
                     progress.setVisibility(ProgressBar.GONE);
                     Toast.makeText(this, tr("sync_failed") + ": " + error.getMessage(), Toast.LENGTH_LONG).show();
                 });
@@ -1393,6 +1419,12 @@ public class MainActivity extends Activity {
 
         static Screen admin() {
             return new Screen("admin", "", 0, 0, YearMonth.now());
+        }
+
+        Screen withPage(int nextPage) {
+            if ("titles".equals(kind)) return titles(type, nextPage);
+            if ("resume".equals(kind)) return resume(nextPage);
+            return this;
         }
     }
 }

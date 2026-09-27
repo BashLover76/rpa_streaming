@@ -15,6 +15,7 @@ streaming.db
 __pycache__/
 *.py[cod]
 .local/
+.gradle/
 android-sdk/
 android/local.properties
 android/.gradle/
