@@ -192,6 +192,7 @@ def create_app() -> Flask:
     app.config["ADMIN_TOKEN"] = settings.admin_token
     app.config["STREAMING_PROFILES"] = settings.profiles
     app.config["DEFAULT_PROFILE_KEY"] = settings.default_profile_key
+    app.config["STREAMING_PLATFORM_PROFILES"] = settings.rpa_platform_profiles
 
     @app.teardown_appcontext
     def close_db(_error: BaseException | None = None) -> None:
@@ -601,6 +602,7 @@ def create_app() -> Flask:
                 "platform_marks": PLATFORM_MARKS,
                 "profiles": profile_options(),
                 "default_profile_key": current_app.config["DEFAULT_PROFILE_KEY"],
+                "platform_profiles": platform_profile_options(),
             }
         )
 
@@ -765,6 +767,26 @@ def profile_options() -> list[dict[str, Any]]:
         }
         for profile in profiles.values()
     ]
+
+
+def platform_profile_options() -> dict[str, list[dict[str, Any]]]:
+    configured = current_app.config.get("STREAMING_PLATFORM_PROFILES", {})
+    profiles = current_app.config.get("STREAMING_PROFILES", {})
+    result: dict[str, list[dict[str, Any]]] = {}
+    for platform, mapping in configured.items():
+        items = []
+        for profile_key, platform_profile_name in mapping.items():
+            profile = profiles.get(profile_key)
+            items.append(
+                {
+                    "profile_key": profile_key,
+                    "profile_label": profile.label if profile else profile_key,
+                    "platform_profile_name": platform_profile_name,
+                    "is_junior": profile.is_junior if profile else False,
+                }
+            )
+        result[platform] = items
+    return result
 
 
 def resolve_profile() -> dict[str, Any]:

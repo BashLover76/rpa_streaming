@@ -12,6 +12,7 @@ backups
 logs
 docs/screenshots
 observability
+config/*.local.json
 .local
 android-sdk
 android/.gradle

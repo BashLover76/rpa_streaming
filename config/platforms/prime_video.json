@@ -23,6 +23,7 @@
       "login_email": "input#ap_email, input[name='email'], input[type='email']",
       "login_password": "input#ap_password, input[name='password'], input[type='password']",
       "login_submit": "input#continue, input#signInSubmit, input[type='submit'], button[type='submit']",
+      "profile": "[data-testid*='profile'], [aria-label*='profile' i], [aria-label*='profil' i], button, a, [role='button']",
       "expand_episodes": "button:has-text('Voir les épisodes'), button:has-text('Voir épisodes'), button:has-text('View episodes'), button:has-text('Episodes')",
       "show_more": "button:has-text('Plus'), button:has-text('More'), button:has-text('Afficher')"
     }
