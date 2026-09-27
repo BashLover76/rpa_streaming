@@ -16,7 +16,7 @@ flowchart TD
 ## Documentation
 
 - [Installation](docs/installation.md) : prérequis, installation automatique multi-OS, venv et Playwright.
-- [Configuration](docs/configuration.md) : `.env`, plateformes, credentials RPA, sécurité et limites.
+- [Configuration](docs/configuration.md) : `.env`, fichiers JSON locaux, plateformes, credentials RPA, sécurité et limites.
 - [Utilisation](docs/usage.md) : commandes d'ingestion, Chrome CDP, modes full/différentiel, enrichissement et sync BetaSeries.
 - [Application web et administration](docs/web-admin.md) : vues calendrier/admin et suppression locale/distante.
 - [Docker web app](docs/docker.md) : image Docker et compose pour exposer Flask/API sur le serveur local.
@@ -39,7 +39,13 @@ Plus de captures : [Application web et administration](docs/web-admin.md#capture
 ```bash
 python tools/install_system_dependencies.py
 cp .env.example .env
-# renseigner .env, puis :
+cp config/betaseries.example.json config/betaseries.local.json
+cp config/ollama.example.json config/ollama.local.json
+cp config/crunchyroll.example.json config/crunchyroll.local.json
+cp config/streaming_profiles.example.json config/streaming_profiles.local.json
+cp config/streaming_platforms.example.json config/streaming_platforms.local.json
+cp config/streaming_platform_config.example.json config/streaming_platform_config.local.json
+# renseigner les fichiers config/*.local.json, puis :
 python main_ingestion.py --cdp-url http://127.0.0.1:9222 --force-restart-chrome
 flask --app web_app run --host 127.0.0.1 --port 5000
 ```
@@ -66,5 +72,6 @@ python -m unittest discover -s tests
 ## Règles de sécurité
 
 - Ne commit jamais `.env`.
+- Ne commit jamais `config/*.local.json`.
 - Ne partage pas `artifacts/rpa`, `backups/` ou `logs/` si ces fichiers contiennent ton historique personnel.
 - Utilise `--apply` uniquement après inspection des dry-runs pour les scripts de suppression ou de synchronisation distante.

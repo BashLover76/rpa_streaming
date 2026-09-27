@@ -108,9 +108,10 @@ docker compose -f /app/docker-compose.rpa.yml run --rm rpa-job \
 Le job RPA partage le volume `streaming-web-data`, donc il écrit directement
 dans `/data/streaming.db`, la même base que celle lue par la web app.
 
-Les identifiants ne sont pas copiés dans l'image. Ils sont lus depuis `.env`
-par `docker-compose.web.yml`, puis transmis au job RPA via l'environnement du
-conteneur.
+Les identifiants ne sont pas copiés dans l'image. Ils sont lus depuis les
+fichiers `config/*.local.json` montés en lecture seule dans les conteneurs. Le
+`.env` ne contient que les chemins vers ces fichiers et quelques réglages
+runtime.
 
 Pour lancer un job RPA Docker à la main depuis WSL :
 
@@ -138,6 +139,8 @@ powershell.exe -NoProfile -Command "Start-Process chrome.exe '--remote-debugging
 ## Sécurité
 
 - Le fichier `.env` n'est pas copié dans les images.
+- Les fichiers `config/*.local.json` sont montés en lecture seule et ignorés par
+  git.
 - `ADMIN_TOKEN` peut être injecté via l'environnement ou via ton shell avant `docker compose`.
 - Les dossiers `artifacts/`, `backups/`, `logs/` et les bases locales ne sont pas copiés dans l'image.
 - La web app ajoute des en-têtes de durcissement HTTP compatibles avec une

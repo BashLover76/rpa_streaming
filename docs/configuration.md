@@ -129,19 +129,14 @@ nominatif en dur.
 Les anciennes variables `STREAMING_PROFILES` et `DEFAULT_PROFILE_KEY` restent
 supportées en fallback.
 
-Variables API:
+Résumé des fichiers JSON de services:
 
-| Variable | Usage |
+| Fichier | Usage |
 | --- | --- |
-| `BETASERIES_API_KEY` | Clé API BetaSeries |
-| `BETASERIES_CLIENT_SECRET` | `oauth2 key` ou secret OAuth de l'application BetaSeries |
-| `BETASERIES_ACCESS_TOKEN` | Token OAuth utilisateur BetaSeries, pas la clé secrète application |
-| `BETASERIES_USER_ID` | Identifiant membre optionnel pour le planning |
-| `CRUNCHYROLL_EMAIL` | Compte Crunchyroll pour wrapper non officiel |
-| `CRUNCHYROLL_PASSWORD` | Mot de passe Crunchyroll |
-| `CRUNCHYROLL_AUTHORIZATION` | Header `Basic ...` optionnel si le client embarqué du wrapper Crunchyroll est inactif |
-| `CRUNCHYROLL_PROFILE_ID` | Profil Crunchyroll optionnel |
-| `CRUNCHYROLL_LOCALE` | Locale, par défaut `fr-FR` |
+| `config/betaseries.local.json` | Clé API, secret OAuth, token membre et identifiant utilisateur optionnel |
+| `config/ollama.local.json` | Modèle, URL locale, contexte, budget de sortie et timeout |
+| `config/crunchyroll.local.json` | Identifiants API non officielle Crunchyroll et locale |
+| `config/streaming_profiles.local.json` | Profils applicatifs et profil par défaut |
 
 Variables RPA de connexion:
 
