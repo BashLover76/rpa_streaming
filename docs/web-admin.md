@@ -82,7 +82,13 @@ configuration active.
 │       ├── content.js
 │       └── manifest.json
 ├── config/
+│   ├── betaseries.example.json
+│   ├── crunchyroll.example.json
+│   ├── ollama.example.json
 │   ├── platforms.example.json
+│   ├── streaming_platform_config.example.json
+│   ├── streaming_platforms.example.json
+│   ├── streaming_profiles.example.json
 │   └── platforms/
 │       ├── apple_tv_plus.json
 │       ├── arte_tv.json

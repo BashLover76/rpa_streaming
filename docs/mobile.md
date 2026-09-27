@@ -4,7 +4,7 @@ Le dossier `android/` contient l'application Android native `StreamPilot`.
 Elle consomme l'API web du serveur local, fonctionne offline après synchronisation
 et ne lance pas le RPA.
 
-Version actuelle : `0.3.0`. Le numéro de version est visible dans l'écran
+Version actuelle : `0.4.0`. Le numéro de version est visible dans l'écran
 `Admin` de l'application.
 
 ## Synchronisation avec le serveur local
@@ -78,10 +78,16 @@ Fonctionnalités mobiles :
   régler la grille/pagination, voir les KPIs offline et lire le log de debug
   de synchronisation.
 - sélecteur de langue par drapeaux : français, anglais et espagnol.
+- sélection dynamique du profil depuis la matrice exposée par
+  `/api/mobile/bootstrap`, avec application automatique du profil par défaut.
 
 Le cache mobile utilise des fichiers JSON et un cache local d'images dans le
 stockage privé de l'application. Une erreur sur une fiche n'arrête plus toute
 la synchro : elle est reportée dans le bloc `Debug synchro`.
+
+Quand un profil est sélectionné dans `Admin`, la prochaine synchronisation
+télécharge les séries, films et calendriers filtrés pour ce profil. Le choix est
+conservé dans les préférences locales de l'application.
 
 Pour rafraîchir les données, reconnecte le téléphone au réseau local du
 serveur local puis appuie à nouveau sur `Synchro`.

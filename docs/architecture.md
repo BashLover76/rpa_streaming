@@ -4,7 +4,7 @@
 
 ```mermaid
 flowchart TD
-    A[main_ingestion.py] --> B[Settings .env]
+    A[main_ingestion.py] --> B[Settings .env + JSON config]
     A --> C[SQLite streaming.db]
     A --> D[BetaSeriesClient]
     A --> E[SelfHealingRPA]
@@ -47,16 +47,18 @@ Elle contient aussi des champs de synchronisation BetaSeries: `betaseries_episod
 
 ### Couche BetaSeries
 
-`ingestion/betaseries_client.py` appelle l'API officielle BetaSeries et upsert les épisodes du calendrier personnalisé. Les variables nécessaires sont:
+`ingestion/betaseries_client.py` appelle l'API officielle BetaSeries et upsert les épisodes du calendrier personnalisé. Les valeurs nécessaires sont dans `BETASERIES_CONFIG_FILE`, par défaut un fichier local comme `config/betaseries.local.json`:
 
-```text
-BETASERIES_API_KEY=
-BETASERIES_CLIENT_SECRET=
-BETASERIES_ACCESS_TOKEN=
-BETASERIES_USER_ID=
+```json
+{
+  "api_key": "your_betaseries_api_key",
+  "client_secret": "your_oauth2_key_or_secret_key",
+  "access_token": "",
+  "user_id": ""
+}
 ```
 
-`BETASERIES_CLIENT_SECRET` correspond à la `oauth2 key` fournie avec la clé API. `BETASERIES_ACCESS_TOKEN` doit être un token membre obtenu après authentification OAuth; la `oauth2 key` ne suffit pas pour les endpoints utilisateur. Si `BETASERIES_USER_ID` est vide, le client tente de résoudre l'utilisateur via `/members/infos`.
+`client_secret` correspond à la `oauth2 key` fournie avec la clé API. `access_token` doit être un token membre obtenu après authentification OAuth; la `oauth2 key` ne suffit pas pour les endpoints utilisateur. Si `user_id` est vide, le client tente de résoudre l'utilisateur via `/members/infos`.
 
 Pour obtenir un token utilisateur avec le device flow:
 
@@ -65,11 +67,11 @@ Pour obtenir un token utilisateur avec le device flow:
 python tools/betaseries_device_auth.py
 ```
 
-Le script affiche une URL BetaSeries, un code à saisir, puis la valeur `BETASERIES_ACCESS_TOKEN` à recopier dans `.env`.
+Le script affiche une URL BetaSeries, un code à saisir, puis la valeur du token à recopier dans `config/betaseries.local.json`.
 
 ### Couche RPA self-healing
 
-`ingestion/rpa_self_healing.py` utilise Playwright avec un profil persistant dans `.playwright-profile`, ou le contexte Chrome Windows via CDP. Le RPA tente le login avec les credentials présents dans `.env`, puis conserve la session navigateur pour limiter les reconnexions interactives.
+`ingestion/rpa_self_healing.py` utilise Playwright avec un profil persistant dans `.playwright-profile`, ou le contexte Chrome Windows via CDP. Le RPA tente le login avec les credentials présents dans `STREAMING_PLATFORM_CONFIG_FILE`, puis conserve la session navigateur pour limiter les reconnexions interactives.
 
 Apple TV+, Max, Paramount+ et OCS sont accessibles dans l'offre CANAL+ du
 compte utilisateur. Ils ne sont donc pas lancés comme des plateformes
@@ -103,4 +105,4 @@ Utilisation:
 3. Active le mode développeur.
 4. Charge le dossier `browser_extension/crunchyroll-token-helper`.
 5. Connecte-toi à Crunchyroll.
-6. Ouvre le popup de l'extension et copie la ligne `CRUNCHYROLL_AUTHORIZATION=...` dans `.env`.
+6. Ouvre le popup de l'extension et copie la valeur `authorization` dans `config/crunchyroll.local.json`.

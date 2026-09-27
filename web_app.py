@@ -186,6 +186,8 @@ def create_app() -> Flask:
     settings = Settings.from_env()
     app.config["DB_PATH"] = settings.db_path
     app.config["ADMIN_TOKEN"] = settings.admin_token
+    app.config["STREAMING_PROFILES"] = settings.profiles
+    app.config["DEFAULT_PROFILE_KEY"] = settings.default_profile_key
 
     @app.teardown_appcontext
     def close_db(_error: BaseException | None = None) -> None:
@@ -232,6 +234,17 @@ def create_app() -> Flask:
                 httponly=True,
                 samesite="Lax",
             )
+        if request.args.get("profile") in current_app.config.get(
+            "STREAMING_PROFILES", {}
+        ):
+            response.set_cookie(
+                "streaming_profile",
+                request.args["profile"],
+                max_age=60 * 60 * 24 * 365,
+                secure=request.is_secure,
+                httponly=True,
+                samesite="Lax",
+            )
         return response
 
     @app.context_processor
@@ -248,6 +261,7 @@ def create_app() -> Flask:
         query = request.args.get("q", "").strip()
         selected_platform = request.args.get("platform", "").strip()
         selected_genre = request.args.get("genre", "").strip()
+        active_profile = resolve_profile()
         try:
             page = max(1, int(request.args.get("page", 1)))
             per_page = int(request.args.get("per_page", 10))
@@ -261,10 +275,18 @@ def create_app() -> Flask:
             query=query,
             platform=selected_platform,
             genre=selected_genre,
+            profile_key=active_profile["key"],
+            junior_only=active_profile["is_junior"],
             limit=per_page,
             offset=(page - 1) * per_page,
         )
-        total_series = count_series(query, selected_platform, selected_genre)
+        total_series = count_series(
+            query,
+            selected_platform,
+            selected_genre,
+            profile_key=active_profile["key"],
+            junior_only=active_profile["is_junior"],
+        )
         stats = fetch_stats()
         return render_template(
             "index.html",
@@ -281,6 +303,8 @@ def create_app() -> Flask:
             per_page=per_page,
             total_series=total_series,
             total_pages=max(1, (total_series + per_page - 1) // per_page),
+            active_profile=active_profile,
+            profile_options=profile_options(),
         )
 
     @app.get("/movies")
@@ -288,6 +312,7 @@ def create_app() -> Flask:
         query = request.args.get("q", "").strip()
         selected_platform = request.args.get("platform", "").strip()
         selected_genre = request.args.get("genre", "").strip()
+        active_profile = resolve_profile()
         try:
             page = max(1, int(request.args.get("page", 1)))
             per_page = int(request.args.get("per_page", 10))
@@ -301,10 +326,18 @@ def create_app() -> Flask:
             query=query,
             platform=selected_platform,
             genre=selected_genre,
+            profile_key=active_profile["key"],
+            junior_only=active_profile["is_junior"],
             limit=per_page,
             offset=(page - 1) * per_page,
         )
-        total_movies = count_movies(query, selected_platform, selected_genre)
+        total_movies = count_movies(
+            query,
+            selected_platform,
+            selected_genre,
+            profile_key=active_profile["key"],
+            junior_only=active_profile["is_junior"],
+        )
         return render_template(
             "movies.html",
             movies=movies,
@@ -320,6 +353,8 @@ def create_app() -> Flask:
             per_page=per_page,
             total_movies=total_movies,
             total_pages=max(1, (total_movies + per_page - 1) // per_page),
+            active_profile=active_profile,
+            profile_options=profile_options(),
         )
 
     @app.get("/series/<int:series_id>")
@@ -455,6 +490,7 @@ def create_app() -> Flask:
         selected_platforms = list(dict.fromkeys(request.args.getlist("platform")))
         calendar_query = request.args.get("q", "").strip()
         calendar_genre = request.args.get("genre", "").strip()
+        active_profile = resolve_profile()
         watched_filter = request.args.get("watched", "all")
         if watched_filter not in {"all", "watched", "unwatched"}:
             abort(400, description="Filtre de visionnage invalide.")
@@ -473,6 +509,8 @@ def create_app() -> Flask:
             watched_filter=watched_filter,
             query=calendar_query,
             genre=calendar_genre,
+            profile_key=active_profile["key"],
+            junior_only=active_profile["is_junior"],
         )
         by_date: dict[str, list[dict]] = {}
         for episode in episodes:
@@ -527,6 +565,8 @@ def create_app() -> Flask:
             month_series_count=len({episode["serie_id"] for episode in episodes}),
             previous_month=previous.strftime("%Y-%m"),
             next_month=following.strftime("%Y-%m"),
+            active_profile=active_profile,
+            profile_options=profile_options(),
         )
 
     @app.get("/api/series/suggest")
@@ -555,6 +595,8 @@ def create_app() -> Flask:
                 },
                 "platform_labels": PLATFORM_LABELS,
                 "platform_marks": PLATFORM_MARKS,
+                "profiles": profile_options(),
+                "default_profile_key": current_app.config["DEFAULT_PROFILE_KEY"],
             }
         )
 
@@ -564,28 +606,45 @@ def create_app() -> Flask:
         query = request.args.get("q", "").strip()
         platform = request.args.get("platform", "").strip()
         genre = request.args.get("genre", "").strip()
+        active_profile = resolve_profile()
         page, per_page = parse_pagination_args(default_per_page=20, max_per_page=100)
         if content_type in {"movie", "movies", "film", "films"}:
-            total = count_movies(query, platform, genre)
+            total = count_movies(
+                query,
+                platform,
+                genre,
+                profile_key=active_profile["key"],
+                junior_only=active_profile["is_junior"],
+            )
             items = [
                 mobile_title_summary(item, content_type="movie")
                 for item in fetch_movies(
                     query=query,
                     platform=platform,
                     genre=genre,
+                    profile_key=active_profile["key"],
+                    junior_only=active_profile["is_junior"],
                     limit=per_page,
                     offset=(page - 1) * per_page,
                 )
             ]
             normalized_type = "movie"
         else:
-            total = count_series(query, platform, genre)
+            total = count_series(
+                query,
+                platform,
+                genre,
+                profile_key=active_profile["key"],
+                junior_only=active_profile["is_junior"],
+            )
             items = [
                 mobile_title_summary(item, content_type="series")
                 for item in search_series(
                     query=query,
                     platform=platform,
                     genre=genre,
+                    profile_key=active_profile["key"],
+                    junior_only=active_profile["is_junior"],
                     limit=per_page,
                     offset=(page - 1) * per_page,
                 )
@@ -599,6 +658,7 @@ def create_app() -> Flask:
                 "per_page": per_page,
                 "total": total,
                 "total_pages": max(1, (total + per_page - 1) // per_page),
+                "profile": active_profile,
             }
         )
 
@@ -634,6 +694,7 @@ def create_app() -> Flask:
         genre = request.args.get("genre", "").strip()
         watched_filter = request.args.get("watched", "all")
         platforms = request.args.getlist("platform")
+        active_profile = resolve_profile()
         episodes = fetch_upcoming_releases(
             selected_month,
             date.today(),
@@ -641,6 +702,8 @@ def create_app() -> Flask:
             watched_filter=watched_filter,
             query=query,
             genre=genre,
+            profile_key=active_profile["key"],
+            junior_only=active_profile["is_junior"],
         )
         return jsonify(
             {
@@ -687,6 +750,48 @@ def language_url(lang: str) -> str:
     return url_for(request.endpoint or "index", **route_args, **args)
 
 
+def profile_options() -> list[dict[str, Any]]:
+    profiles = current_app.config.get("STREAMING_PROFILES", {})
+    return [
+        {
+            "key": profile.key,
+            "label": profile.label,
+            "technical_id": profile.technical_id,
+            "is_junior": profile.is_junior,
+        }
+        for profile in profiles.values()
+    ]
+
+
+def resolve_profile() -> dict[str, Any]:
+    profiles = current_app.config.get("STREAMING_PROFILES", {})
+    default_key = current_app.config.get("DEFAULT_PROFILE_KEY")
+    requested = request.args.get("profile") or request.cookies.get("streaming_profile")
+    key = requested if requested in profiles else default_key
+    profile = profiles[key]
+    return {
+        "key": profile.key,
+        "label": profile.label,
+        "technical_id": profile.technical_id,
+        "is_junior": profile.is_junior,
+    }
+
+
+def append_profile_filter(
+    where: list[str],
+    params: list[Any],
+    *,
+    alias: str = "s",
+    profile_key: str | None = None,
+    junior_only: bool = False,
+) -> None:
+    if profile_key:
+        where.append(f"({alias}.profile_key IS NULL OR {alias}.profile_key = ?)")
+        params.append(profile_key)
+    if junior_only:
+        where.append(f"COALESCE({alias}.suitable_for_junior, 0) = 1")
+
+
 def fetch_platforms() -> list[dict[str, Any]]:
     rows = get_db().execute("""
         SELECT COALESCE(plateforme, 'unknown') AS platform, COUNT(*) AS total
@@ -714,6 +819,8 @@ def fetch_movies(
     query: str = "",
     platform: str = "",
     genre: str = "",
+    profile_key: str | None = None,
+    junior_only: bool = False,
     *,
     limit: int | None = None,
     offset: int = 0,
@@ -729,6 +836,9 @@ def fetch_movies(
     if genre:
         where.append("LOWER(COALESCE(s.genres, '')) LIKE LOWER(?)")
         params.append(f"%{genre}%")
+    append_profile_filter(
+        where, params, profile_key=profile_key, junior_only=junior_only
+    )
     rows = (
         get_db()
         .execute(
@@ -748,7 +858,9 @@ def fetch_movies(
         LEFT JOIN history AS h ON h.serie_id = s.id
         WHERE {' AND '.join(where)}
         GROUP BY s.id
-        ORDER BY s.titre COLLATE NOCASE
+        ORDER BY
+            COALESCE(MAX(h.date_vu), s.updated_at, s.last_updated_at, s.titre) DESC,
+            s.id DESC
         """ + (" LIMIT ? OFFSET ?" if limit is not None else ""),
             params + ([limit, offset] if limit is not None else []),
         )
@@ -757,7 +869,13 @@ def fetch_movies(
     return [dict(row) for row in rows]
 
 
-def count_movies(query: str = "", platform: str = "", genre: str = "") -> int:
+def count_movies(
+    query: str = "",
+    platform: str = "",
+    genre: str = "",
+    profile_key: str | None = None,
+    junior_only: bool = False,
+) -> int:
     filters = ["LOWER(COALESCE(s.imdb_kind, '')) IN ('movie', 'film')"]
     params: list[Any] = []
     if query:
@@ -769,6 +887,9 @@ def count_movies(query: str = "", platform: str = "", genre: str = "") -> int:
     if genre:
         filters.append("LOWER(COALESCE(s.genres, '')) LIKE LOWER(?)")
         params.append(f"%{genre}%")
+    append_profile_filter(
+        filters, params, profile_key=profile_key, junior_only=junior_only
+    )
     return (
         get_db()
         .execute(
@@ -1264,6 +1385,8 @@ def search_series(
     query: str = "",
     platform: str = "",
     genre: str = "",
+    profile_key: str | None = None,
+    junior_only: bool = False,
     *,
     limit: int | None = None,
     offset: int = 0,
@@ -1279,6 +1402,9 @@ def search_series(
     if genre:
         where.append("LOWER(COALESCE(s.genres, '')) LIKE LOWER(?)")
         params.append(f"%{genre}%")
+    append_profile_filter(
+        where, params, profile_key=profile_key, junior_only=junior_only
+    )
 
     where_sql = f"WHERE {' AND '.join(where)}" if where else ""
     rows = (
@@ -1298,16 +1424,16 @@ def search_series(
             COUNT(DISTINCT c.id) AS calendar_count,
             COUNT(DISTINCT c.saison) AS seasons_count_local,
             COUNT(DISTINCT CASE WHEN c.episode IS NOT NULL THEN c.id END) AS episodes_count_local,
-            MIN(CASE WHEN c.date_diffusion >= DATE('now') THEN c.date_diffusion END) AS next_air_date
+            MIN(CASE WHEN c.date_diffusion >= DATE('now') THEN c.date_diffusion END) AS next_air_date,
+            MAX(h.date_vu) AS last_watched_at
         FROM series s
         LEFT JOIN history h ON h.serie_id = s.id
         LEFT JOIN calendar c ON c.serie_id = s.id
         {where_sql}
         GROUP BY s.id
         ORDER BY
-            CASE WHEN next_air_date IS NULL THEN 1 ELSE 0 END,
-            next_air_date ASC,
-            s.titre COLLATE NOCASE ASC
+            COALESCE(last_watched_at, s.updated_at, s.last_updated_at, '') DESC,
+            s.id DESC
         """ + (" LIMIT ? OFFSET ?" if limit is not None else ""),
             params + ([limit, offset] if limit is not None else []),
         )
@@ -1340,7 +1466,13 @@ def search_series(
     return result
 
 
-def count_series(query: str = "", platform: str = "", genre: str = "") -> int:
+def count_series(
+    query: str = "",
+    platform: str = "",
+    genre: str = "",
+    profile_key: str | None = None,
+    junior_only: bool = False,
+) -> int:
     filters = [VALID_SERIES_TITLE_SQL]
     params: list[Any] = []
     if query:
@@ -1352,6 +1484,9 @@ def count_series(query: str = "", platform: str = "", genre: str = "") -> int:
     if genre:
         filters.append("LOWER(COALESCE(s.genres, '')) LIKE LOWER(?)")
         params.append(f"%{genre}%")
+    append_profile_filter(
+        filters, params, profile_key=profile_key, junior_only=junior_only
+    )
     where = f"WHERE {' AND '.join(filters)}" if filters else ""
     return (
         get_db()
@@ -1523,6 +1658,8 @@ def fetch_upcoming_releases(
     watched_filter: str = "all",
     query: str = "",
     genre: str = "",
+    profile_key: str | None = None,
+    junior_only: bool = False,
 ) -> list[dict[str, Any]]:
     last_day = month.replace(day=month_calendar.monthrange(month.year, month.month)[1])
     first_day = month
@@ -1538,6 +1675,11 @@ def fetch_upcoming_releases(
     if genre:
         platform_filter += " AND LOWER(COALESCE(s.genres, '')) LIKE LOWER(?)"
         params.append(f"%{genre}%")
+    if profile_key:
+        platform_filter += " AND (s.profile_key IS NULL OR s.profile_key = ?)"
+        params.append(profile_key)
+    if junior_only:
+        platform_filter += " AND COALESCE(s.suitable_for_junior, 0) = 1"
     watched_expression = """EXISTS (
         SELECT 1
         FROM history AS watched_history
@@ -1724,6 +1866,8 @@ def mobile_title_summary(
         "year": item.get("creation_year"),
         "rating": item.get("imdb_rating"),
         "runtime_minutes": item.get("runtime_minutes"),
+        "profile_key": item.get("profile_key"),
+        "suitable_for_junior": bool(item.get("suitable_for_junior")),
         "deep_link_url": fetch_deep_link_url(int(item["id"]), platform=platform),
     }
 
@@ -1749,6 +1893,8 @@ def mobile_title_detail(
         "platform": platform,
         "platforms": serie.get("platforms") or [platform],
         "platform_label": PLATFORM_LABELS.get(platform, platform),
+        "profile_key": serie.get("profile_key"),
+        "suitable_for_junior": bool(serie.get("suitable_for_junior")),
         "poster_url": serie.get("poster_url"),
         "banner_url": serie.get("banner_url"),
         "synopsis": serie.get("synopsis") or serie.get("imdb_plot"),

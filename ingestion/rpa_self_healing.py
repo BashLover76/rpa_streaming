@@ -171,7 +171,7 @@ class SelfHealingRPA:
             browser = playwright.chromium.connect_over_cdp(
                 self.cdp_url,
                 timeout=self.cdp_timeout_ms,
-                headers=_cdp_headers(self.cdp_url),
+                headers=_cdp_playwright_headers(self.cdp_url),
             )
         except Exception as exc:
             raise CDPConnectionError(_cdp_recovery_message(self.cdp_url)) from exc
@@ -217,7 +217,10 @@ class SelfHealingRPA:
         try:
             request = Request(
                 version_url,
-                headers={"Accept": "application/json", **_cdp_headers(self.cdp_url)},
+                headers={
+                    "Accept": "application/json",
+                    **_cdp_request_headers(self.cdp_url),
+                },
             )
             with urlopen(request, timeout=5) as response:
                 payload = json.loads(response.read().decode("utf-8"))
@@ -1388,7 +1391,7 @@ def _cdp_recovery_message(cdp_url: str | None) -> str:
     )
 
 
-def _cdp_headers(cdp_url: str | None) -> dict[str, str]:
+def _cdp_request_headers(cdp_url: str | None) -> dict[str, str]:
     if not cdp_url:
         return {}
     parsed = urlsplit(cdp_url)
@@ -1396,6 +1399,13 @@ def _cdp_headers(cdp_url: str | None) -> dict[str, str]:
         return {}
     port = parsed.port or 9222
     return {"Host": f"127.0.0.1:{port}"}
+
+
+def _cdp_playwright_headers(cdp_url: str | None) -> list[dict[str, str]]:
+    return [
+        {"name": name, "value": value}
+        for name, value in _cdp_request_headers(cdp_url).items()
+    ]
 
 
 def _looks_like_selector(selector: str) -> bool:

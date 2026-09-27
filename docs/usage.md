@@ -5,7 +5,7 @@
 Chrome doit etre accessible via son port CDP et connecte aux profils
 souhaites. Sous WSL, Chrome est lance cote Windows ; sous Linux natif, Chrome ou
 Chromium est lance localement ; sous Windows natif, Chrome est lance via
-PowerShell. Les identifiants BetaSeries restent dans `.env`. Ollama reste utile
+PowerShell. Les identifiants BetaSeries restent dans `config/betaseries.local.json`. Ollama reste utile
 pour les cartes non structurees et la reparation de selecteurs ; les cartes
 lisibles sont extraites directement du DOM.
 
@@ -222,18 +222,16 @@ ollama pull gemma3:4b
 curl http://127.0.0.1:11434/api/tags
 ```
 
-Dans `.env`, configure :
+Dans `config/ollama.local.json`, configure :
 
-```dotenv
-OLLAMA_MODEL=gemma3:4b
-```
-
-Reglages utilises par chaque requete (dans `.env`) :
-
-```dotenv
-OLLAMA_NUM_CTX=32768
-OLLAMA_NUM_PREDICT=4096
-OLLAMA_TIMEOUT=300
+```json
+{
+  "model": "gemma3:4b",
+  "base_url": "http://localhost:11434",
+  "num_ctx": 32768,
+  "num_predict": 4096,
+  "timeout": 300
+}
 ```
 
 `NUM_CTX` borne le contexte d'entree; `NUM_PREDICT` borne la sortie. Le
@@ -257,13 +255,14 @@ d'arret. Si la sortie est tronquee, reduis les lots ou augmente le budget de
 sortie. Augmenter seulement le contexte ne corrige pas une boucle de generation.
 
 Le test `/api/tags` doit retourner un JSON contenant `gemma3:4b`. Si Ollama
-tourne sous Windows et non dans WSL, remplace `OLLAMA_BASE_URL` dans `.env` par
-l'adresse de l'hote Windows accessible depuis WSL, par exemple
-`http://$(ip route | awk '/default/ {print $3}'):11434`, puis relance le test.
+tourne sous Windows et non dans WSL, remplace `base_url` dans
+`config/ollama.local.json` par l'adresse de l'hote Windows accessible depuis
+WSL, par exemple `http://$(ip route | awk '/default/ {print $3}'):11434`, puis
+relance le test.
 Une erreur HTTP 404 sur `/api/chat` indique que le port cible n'est pas le
 serveur Ollama attendu.
 
-`--cdp-url` est prioritaire sur `.env`. Sans URL CDP, Playwright conserve son
+`--cdp-url` est prioritaire sur `RPA_CDP_URL` dans `.env`. Sans URL CDP, Playwright conserve son
 comportement historique et lance un Chromium persistant avec
 `RPA_USER_DATA_DIR`.
 
@@ -375,7 +374,7 @@ python tools/enriched_stats.py
 
 Le flux recommandé est maintenant le plus automatique possible:
 
-1. Renseigne les variables `*_EMAIL` et `*_PASSWORD` nécessaires dans `.env`.
+1. Renseigne `email`, `password` et `profile_name` dans `config/streaming_platform_config.local.json`.
 2. Lance Chrome en CDP, ou laisse `main_ingestion.py` le démarrer si `RPA_CDP_URL` est défini.
 3. L'ingestion charge automatiquement l'extension locale au démarrage de Chrome et tente le login RPA sur chaque plateforme.
 4. Si une plateforme impose MFA, CAPTCHA ou validation appareil, termine cette étape dans Chrome; la session restera conservée ensuite.

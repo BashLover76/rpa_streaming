@@ -4,6 +4,38 @@ Tous les changements notables de ce projet sont documentés ici.
 
 Le format suit l'esprit de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet utilise pour l'instant un versionnement interne non tagué.
 
+## [0.4.0] - 2026-09-27
+
+### Ajouté
+
+- Matrice de profils configurable via `.env` avec `STREAMING_PROFILES` et
+  `DEFAULT_PROFILE_KEY`.
+- Mapping JSON `STREAMING_PLATFORMS` et `STREAMING_PLATFORM_CONFIG` pour gérer
+  l'activation, les credentials RPA et les profils par plateforme.
+- Fichiers JSON dédiés `STREAMING_PLATFORMS_FILE` et
+  `STREAMING_PLATFORM_CONFIG_FILE` pour garder une configuration plateformes
+  aérée et lisible.
+- Fichiers JSON dédiés BetaSeries, Ollama, Crunchyroll et profils applicatifs
+  pour éviter les longues variables `.env`.
+- Colonnes SQLite `profile_key` et `suitable_for_junior` pour les titres et les
+  historiques.
+- Sélecteur de profil dans les vues web séries, films et calendrier.
+- Exposition des profils dans l'API mobile et sélection du profil actif dans
+  l'écran Admin Android.
+- Documentation de configuration des profils et du comportement mobile associé.
+
+### Modifié
+
+- Les flux web et API mobile filtrent selon le profil actif et le flag junior.
+- Les listes séries et films sont triées en priorité par dernière date de
+  visionnage ou d'ingestion en ordre antéchronologique.
+- L'ingestion annote les nouveaux historiques avec le profil par défaut sans
+  valeur nominative hardcodée.
+- Le compose RPA lit maintenant `.env` et transmet la configuration JSON des
+  plateformes au conteneur.
+- Les compose web/RPA montent `./config` en lecture seule pour lire les fichiers
+  `.local.json` sans les intégrer aux images Docker.
+
 ## [0.3.0] - 2026-09-26
 
 ### Ajouté
@@ -34,7 +66,7 @@ Le format suit l'esprit de [Keep a Changelog](https://keepachangelog.com/fr/1.1.
 - RPA Playwright compatible Chrome CDP, Windows, Linux et WSL.
 - Démarrage automatique de Chrome avec CDP et extension locale.
 - Option `--force-restart-chrome` pour fermer Chrome et le relancer avec CDP + extension.
-- Login RPA par plateforme depuis les variables `*_EMAIL` et `*_PASSWORD` du `.env`.
+- Login RPA par plateforme depuis les fichiers JSON locaux référencés par `.env`.
 - Modes RPA `full` et `differential`.
 - Logs par script et par plateforme, avec rotation quotidienne.
 - Connecteur Grafana/Loki via `observability/`.
@@ -52,6 +84,7 @@ Le format suit l'esprit de [Keep a Changelog](https://keepachangelog.com/fr/1.1.
 
 ### Sécurité
 
-- Les secrets restent centralisés dans `.env`.
+- Les secrets restent centralisés dans `.env` et les fichiers `config/*.local.json`
+  ignorés par git.
 - Les credentials RPA ne sont pas écrits dans les logs.
 - Les opérations destructrices distantes restent en dry-run par défaut et demandent `--apply`.

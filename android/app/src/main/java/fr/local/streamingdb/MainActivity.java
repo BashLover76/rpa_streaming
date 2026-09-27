@@ -53,7 +53,7 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private static final int DEFAULT_PAGE_SIZE = 10;
-    private static final String APP_VERSION = "0.3.0";
+    private static final String APP_VERSION = "0.4.0";
 
     private final ExecutorService executor = Executors.newFixedThreadPool(3);
     private final List<Screen> backStack = new ArrayList<>();
@@ -78,12 +78,14 @@ public class MainActivity extends Activity {
     private int colorAccent;
     private String sortMode = "recent";
     private String language = "fr";
+    private String activeProfileKey = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences("streaming-db", MODE_PRIVATE);
         language = prefs.getString("language", "fr");
+        activeProfileKey = prefs.getString("profile_key", "");
         configurePalette();
         buildLayout();
         navigate(Screen.titles("series", 0), false);
@@ -498,6 +500,7 @@ public class MainActivity extends Activity {
         syncStatus = line(lastSyncLabel());
         content.addView(syncStatus);
         addLanguageSettings();
+        addProfileSettings();
         addAdminSettings();
         addAdminKpis();
         addDebugLog();
@@ -546,6 +549,34 @@ public class MainActivity extends Activity {
             navigate(Screen.admin(), false);
         });
         row.addView(button, new LinearLayout.LayoutParams(0, -2, 1));
+    }
+
+    private void addProfileSettings() {
+        addSection(tr("profile"));
+        LinearLayout row = card();
+        row.setOrientation(LinearLayout.VERTICAL);
+        JSONObject bootstrap = cachedJson("bootstrap");
+        JSONArray profiles = bootstrap == null ? null : bootstrap.optJSONArray("profiles");
+        if (profiles == null || profiles.length() == 0) {
+            row.addView(line(tr("profile_sync_required")));
+            content.addView(row);
+            return;
+        }
+        for (int index = 0; index < profiles.length(); index++) {
+            JSONObject profile = profiles.optJSONObject(index);
+            if (profile == null) continue;
+            String key = profile.optString("key", "");
+            String label = profile.optString("label", key);
+            Button button = button(label, key.equals(activeProfileKey));
+            button.setContentDescription(tr("profile") + ": " + label);
+            button.setOnClickListener(v -> {
+                activeProfileKey = key;
+                prefs.edit().putString("profile_key", key).apply();
+                Toast.makeText(this, tr("profile_saved"), Toast.LENGTH_SHORT).show();
+            });
+            row.addView(button);
+        }
+        content.addView(row);
     }
 
     private void addAdminKpis() {
@@ -599,10 +630,11 @@ public class MainActivity extends Activity {
         if (syncStatus != null) syncStatus.setText(tr("sync_running"));
         executor.submit(() -> {
             try {
-                JSONObject series = fetchAllTitles("series", fetchSync("/api/mobile/titles?type=series&per_page=100"));
-                JSONObject movies = fetchAllTitles("movie", fetchSync("/api/mobile/titles?type=movie&per_page=100"));
                 JSONObject bootstrap = fetchSync("/api/mobile/bootstrap");
+                applyDefaultProfileFromBootstrap(bootstrap);
                 StringBuilder debug = new StringBuilder("Début synchro\n");
+                JSONObject series = fetchAllTitles("series", fetchSync("/api/mobile/titles?type=series&per_page=100" + profileQuery()));
+                JSONObject movies = fetchAllTitles("movie", fetchSync("/api/mobile/titles?type=movie&per_page=100" + profileQuery()));
                 writeCacheJson(cacheKeyForTitles("series"), series);
                 writeCacheJson(cacheKeyForTitles("movie"), movies);
                 writeCacheJson("bootstrap", bootstrap);
@@ -612,7 +644,7 @@ public class MainActivity extends Activity {
                 JSONObject currentCalendar = null;
                 for (int offset = 0; offset <= 18; offset++) {
                     YearMonth month = firstMonth.plusMonths(offset);
-                    JSONObject calendar = fetchSync("/api/mobile/calendar?month=" + month);
+                    JSONObject calendar = fetchSync("/api/mobile/calendar?month=" + month + profileQuery("&"));
                     writeCacheJson(cacheKeyForCalendar(month), calendar);
                     if (month.equals(YearMonth.now())) currentCalendar = calendar;
                 }
@@ -663,10 +695,29 @@ public class MainActivity extends Activity {
         appendItems(merged, firstPage.optJSONArray("items"));
         int totalPages = Math.max(1, firstPage.optInt("total_pages", 1));
         for (int page = 2; page <= totalPages; page++) {
-            appendItems(merged, fetchSync("/api/mobile/titles?type=" + url(type) + "&per_page=100&page=" + page).optJSONArray("items"));
+            appendItems(merged, fetchSync("/api/mobile/titles?type=" + url(type) + "&per_page=100&page=" + page + profileQuery("&")).optJSONArray("items"));
         }
         firstPage.put("items", merged);
         return firstPage;
+    }
+
+    private void applyDefaultProfileFromBootstrap(JSONObject bootstrap) {
+        if (bootstrap == null) return;
+        if (activeProfileKey == null || activeProfileKey.isEmpty()) {
+            activeProfileKey = bootstrap.optString("default_profile_key", "");
+            if (!activeProfileKey.isEmpty()) {
+                prefs.edit().putString("profile_key", activeProfileKey).apply();
+            }
+        }
+    }
+
+    private String profileQuery() {
+        return profileQuery("&");
+    }
+
+    private String profileQuery(String separator) {
+        if (activeProfileKey == null || activeProfileKey.isEmpty()) return "";
+        return separator + "profile=" + url(activeProfileKey);
     }
 
     private JSONObject fetchSync(String path) throws Exception {
@@ -883,6 +934,9 @@ public class MainActivity extends Activity {
             case "open_platform": return "Ouvrir sur la plateforme";
             case "page": return "Page";
             case "previous": return "Précédent";
+            case "profile": return "Profil";
+            case "profile_saved": return "Profil enregistré";
+            case "profile_sync_required": return "Lance une synchro pour charger les profils disponibles.";
             case "quit": return "Quitter";
             case "recent_history": return "Historique récent";
             case "resume": return "Reprendre";
@@ -937,6 +991,9 @@ public class MainActivity extends Activity {
             case "open_platform": return "Open on platform";
             case "page": return "Page";
             case "previous": return "Previous";
+            case "profile": return "Profile";
+            case "profile_saved": return "Profile saved";
+            case "profile_sync_required": return "Run a sync to load available profiles.";
             case "quit": return "Quit";
             case "recent_history": return "Recent history";
             case "resume": return "Resume";
@@ -991,6 +1048,9 @@ public class MainActivity extends Activity {
             case "open_platform": return "Abrir en la plataforma";
             case "page": return "Página";
             case "previous": return "Anterior";
+            case "profile": return "Perfil";
+            case "profile_saved": return "Perfil guardado";
+            case "profile_sync_required": return "Lanza una sincronización para cargar los perfiles disponibles.";
             case "quit": return "Salir";
             case "recent_history": return "Historial reciente";
             case "resume": return "Reanudar";

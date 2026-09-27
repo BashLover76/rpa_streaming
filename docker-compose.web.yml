@@ -1,6 +1,6 @@
 services:
   streaming-web:
-    image: ${STREAMING_WEB_IMAGE:-rpa-streaming-web}:${STREAMING_WEB_TAG:-0.3.0}
+    image: ${STREAMING_WEB_IMAGE:-rpa-streaming-web}:${STREAMING_WEB_TAG:-0.4.0}
     build:
       context: .
       dockerfile: Dockerfile.web
@@ -21,6 +21,7 @@ services:
       - streaming-web-data:/data
       - streaming-web-state:/app/.continue
       - streaming-web-logs:/app/logs
+      - ./config:/app/config:ro
       - /var/run/docker.sock:/var/run/docker.sock
     extra_hosts:
       - "host.docker.internal:host-gateway"

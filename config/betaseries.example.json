@@ -1,0 +1,6 @@
+{
+  "api_key": "your_betaseries_api_key",
+  "client_secret": "your_oauth2_key_or_secret_key",
+  "access_token": "",
+  "user_id": ""
+}

@@ -2,14 +2,14 @@
 
 ## Etat des connecteurs
 
-| Plateforme | Stratégie | Config | Variables utiles |
+| Plateforme | Stratégie | Config | Paramètres utiles |
 | --- | --- | --- | --- |
-| BetaSeries | API officielle | `.env` | `BETASERIES_API_KEY`, `BETASERIES_CLIENT_SECRET`, `BETASERIES_ACCESS_TOKEN`, `BETASERIES_USER_ID` optionnel |
-| Crunchyroll | API non officielle puis RPA secours | `config/platforms/crunchyroll.json` | `CRUNCHYROLL_EMAIL`, `CRUNCHYROLL_PASSWORD`, `CRUNCHYROLL_PROFILE_ID`, `CRUNCHYROLL_LOCALE` |
-| Netflix | RPA | `config/platforms/netflix.json` | `NETFLIX_EMAIL`, `NETFLIX_PASSWORD` ou session Chrome déjà connectée |
-| Prime Video | RPA | `config/platforms/prime_video.json` | `PRIME_VIDEO_EMAIL`, `PRIME_VIDEO_PASSWORD` ou session Chrome déjà connectée |
-| Disney+ | RPA + extension helper | `config/platforms/disney_plus.json` | `DISNEY_PLUS_EMAIL`, `DISNEY_PLUS_PASSWORD` ou session Chrome déjà connectée |
-| CANAL+ | RPA + extension helper | `config/platforms/canal_plus.json` | `CANAL_PLUS_EMAIL`, `CANAL_PLUS_PASSWORD`, `CANAL_PLUS_PROFILE_NAME` |
+| BetaSeries | API officielle | `config/betaseries.local.json` | `api_key`, `client_secret`, `access_token`, `user_id` optionnel |
+| Crunchyroll | API non officielle puis RPA secours | `config/crunchyroll.local.json` + `config/platforms/crunchyroll.json` | `email`, `password`, `authorization`, `profile_id`, `locale` |
+| Netflix | RPA | `config/streaming_platform_config.local.json` + `config/platforms/netflix.json` | `email`, `password`, `profile_name` ou session Chrome déjà connectée |
+| Prime Video | RPA | `config/streaming_platform_config.local.json` + `config/platforms/prime_video.json` | `email`, `password`, `profile_name` ou session Chrome déjà connectée |
+| Disney+ | RPA + extension helper | `config/streaming_platform_config.local.json` + `config/platforms/disney_plus.json` | `email`, `password`, `profile_name` ou session Chrome déjà connectée |
+| CANAL+ | RPA + extension helper | `config/streaming_platform_config.local.json` + `config/platforms/canal_plus.json` | `email`, `password`, `profile_name` |
 | Apple TV+ | Via CANAL+ | `config/platforms/canal_plus.json` | Compte CANAL+ |
 | HBO Max / Max | Via CANAL+ | `config/platforms/canal_plus.json` | Compte CANAL+ |
 | Paramount+ | Via CANAL+ | `config/platforms/canal_plus.json` | Compte CANAL+ |

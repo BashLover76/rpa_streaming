@@ -48,21 +48,49 @@ playwright install chromium
 ollama pull llava:latest
 ```
 
-Le fichier `.env` est généré avec des valeurs vides. Renseigne au minimum:
+Copie d'abord les fichiers d'exemple vers leurs variantes locales ignorées par git:
 
-```text
-BETASERIES_API_KEY=
-BETASERIES_ACCESS_TOKEN=
-OLLAMA_MODEL=gemma3:4b
-OLLAMA_BASE_URL=http://localhost:11434
+```bash
+cp .env.example .env
+cp config/betaseries.example.json config/betaseries.local.json
+cp config/ollama.example.json config/ollama.local.json
+cp config/crunchyroll.example.json config/crunchyroll.local.json
+cp config/streaming_profiles.example.json config/streaming_profiles.local.json
+cp config/streaming_platforms.example.json config/streaming_platforms.local.json
+cp config/streaming_platform_config.example.json config/streaming_platform_config.local.json
 ```
 
-Pour Crunchyroll via API non officielle:
+Renseigne au minimum `config/betaseries.local.json`:
 
-```text
-CRUNCHYROLL_EMAIL=
-CRUNCHYROLL_PASSWORD=
-CRUNCHYROLL_AUTHORIZATION=
-CRUNCHYROLL_PROFILE_ID=
-CRUNCHYROLL_LOCALE=fr-FR
+```json
+{
+  "api_key": "your_betaseries_api_key",
+  "client_secret": "your_oauth2_key_or_secret_key",
+  "access_token": "",
+  "user_id": ""
+}
+```
+
+Vérifie aussi `config/ollama.local.json` :
+
+```json
+{
+  "model": "gemma3:4b",
+  "base_url": "http://localhost:11434",
+  "num_ctx": 32768,
+  "num_predict": 4096,
+  "timeout": 300
+}
+```
+
+Pour Crunchyroll via API non officielle, complète `config/crunchyroll.local.json` :
+
+```json
+{
+  "email": "",
+  "password": "",
+  "authorization": "",
+  "profile_id": "",
+  "locale": "fr-FR"
+}
 ```

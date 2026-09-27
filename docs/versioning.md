@@ -8,7 +8,7 @@ Le projet suit un versioning sémantique simple :
 - `MINOR` : nouvelle fonctionnalité compatible.
 - `PATCH` : correctif sans changement fonctionnel majeur.
 
-Version courante : `0.3.0`.
+Version courante : `0.4.0`.
 
 Les emplacements à mettre à jour ensemble sont :
 
@@ -21,7 +21,7 @@ Les emplacements à mettre à jour ensemble sont :
 
 ## Branches
 
-Convention recommandée :
+La politique de branche est définie dans [GitFlow strict](gitflow.md). Résumé :
 
 ```text
 feature/<scope>-<description>
@@ -38,12 +38,12 @@ feature/mobile-i18n
 feature/docker-versioning
 fix/mobile-resume-filter
 docs/security-versioning
-release/0.3.0
+release/0.4.0
 ```
 
-La branche actuelle peut rester telle quelle tant que le travail est local. Pour
-préparer une publication propre, crée une branche `release/0.3.0` ou renomme la
-branche de travail avant merge.
+`main` ne reçoit pas de commits directs. Elle reçoit uniquement des merges
+`--no-ff` depuis `release/<version>` ou `hotfix/<version>`, puis un tag
+annoté `v<version>`.
 
 ## Commits
 
@@ -71,6 +71,6 @@ chore(docker): version web and rpa images
 docs: document i18n versioning and docker tags
 ```
 
-Évite de réécrire l'historique déjà partagé. Si l'historique n'a pas été poussé,
-un squash interactif peut regrouper les micro-commits en commits lisibles par
-domaine fonctionnel.
+Toute correction d'historique partagé doit rester exceptionnelle, être demandée
+explicitement, et être suivie d'un `--force-with-lease`. En dehors de ce cas,
+on corrige par nouveau commit sur une branche appropriée.

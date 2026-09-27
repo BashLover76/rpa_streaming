@@ -1,6 +1,12 @@
 .env
 .env.*
 !.env.example
+config/betaseries.local.json
+config/ollama.local.json
+config/crunchyroll.local.json
+config/streaming_profiles.local.json
+config/streaming_platforms.local.json
+config/streaming_platform_config.local.json
 .playwright-profile/
 artifacts/
 backups/
