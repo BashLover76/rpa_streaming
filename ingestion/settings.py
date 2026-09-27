@@ -43,6 +43,7 @@ class Settings:
     crunchyroll_locale: str
     rpa_credentials: dict[str, dict[str, str]]
     rpa_profile_names: dict[str, str]
+    rpa_platform_profiles: dict[str, dict[str, str]]
     streaming_platforms: dict[str, bool]
     profiles: dict[str, StreamingProfile]
     default_profile_key: str
@@ -59,6 +60,10 @@ class Settings:
         streaming_platforms = _load_streaming_platforms(platform_config)
         credentials = _credentials_from_platform_config(platform_config)
         profile_names = _profile_names_from_platform_config(platform_config)
+        platform_profiles = _platform_profiles_from_platform_config(
+            platform_config,
+            default_profile_key,
+        )
         return cls(
             betaseries_api_key=betaseries["api_key"],
             betaseries_client_secret=betaseries["client_secret"],
@@ -87,6 +92,7 @@ class Settings:
             crunchyroll_locale=crunchyroll["locale"],
             rpa_credentials=credentials,
             rpa_profile_names=profile_names,
+            rpa_platform_profiles=platform_profiles,
             streaming_platforms=streaming_platforms,
             profiles=profiles,
             default_profile_key=default_profile_key,
@@ -167,7 +173,7 @@ PLATFORM_ENV_PREFIXES = {
 }
 
 
-def _load_streaming_platform_config() -> dict[str, dict[str, str]]:
+def _load_streaming_platform_config() -> dict[str, dict[str, object]]:
     legacy_config = _legacy_platform_config_from_env()
     file_config = _load_json_file_object(
         os.getenv("STREAMING_PLATFORM_CONFIG_FILE", "").strip(),
@@ -185,9 +191,9 @@ def _load_streaming_platform_config() -> dict[str, dict[str, str]]:
 
 def _normalize_platform_config(
     parsed: dict[str, object],
-    fallback: dict[str, dict[str, str]],
-) -> dict[str, dict[str, str]]:
-    config: dict[str, dict[str, str]] = {}
+    fallback: dict[str, dict[str, object]],
+) -> dict[str, dict[str, object]]:
+    config: dict[str, dict[str, object]] = {}
     for platform, values in parsed.items():
         if not isinstance(values, dict):
             continue
@@ -200,14 +206,15 @@ def _normalize_platform_config(
                 or values.get("profile")
                 or ""
             ),
+            "profiles": values.get("profiles") if isinstance(values.get("profiles"), dict) else {},
         }
     for platform, values in fallback.items():
         config.setdefault(platform, values)
     return config
 
 
-def _legacy_platform_config_from_env() -> dict[str, dict[str, str]]:
-    config: dict[str, dict[str, str]] = {}
+def _legacy_platform_config_from_env() -> dict[str, dict[str, object]]:
+    config: dict[str, dict[str, object]] = {}
     for platform, prefix in PLATFORM_ENV_PREFIXES.items():
         config[platform] = {
             "email": os.getenv(f"{prefix}_EMAIL", ""),
@@ -218,7 +225,7 @@ def _legacy_platform_config_from_env() -> dict[str, dict[str, str]]:
 
 
 def _load_streaming_platforms(
-    platform_config: dict[str, dict[str, str]]
+    platform_config: dict[str, dict[str, object]]
 ) -> dict[str, bool]:
     file_mapping = _load_json_file_object(
         os.getenv("STREAMING_PLATFORMS_FILE", "").strip(),
@@ -238,24 +245,43 @@ def _load_streaming_platforms(
 
 
 def _credentials_from_platform_config(
-    platform_config: dict[str, dict[str, str]]
+    platform_config: dict[str, dict[str, object]]
 ) -> dict[str, dict[str, str]]:
     return {
         platform: {
-            "email": values.get("email", ""),
-            "password": values.get("password", ""),
+            "email": str(values.get("email") or ""),
+            "password": str(values.get("password") or ""),
         }
         for platform, values in platform_config.items()
     }
 
 
 def _profile_names_from_platform_config(
-    platform_config: dict[str, dict[str, str]]
+    platform_config: dict[str, dict[str, object]]
 ) -> dict[str, str]:
     return {
-        platform: values.get("profile_name", "")
+        platform: str(values.get("profile_name") or "")
         for platform, values in platform_config.items()
     }
+
+
+def _platform_profiles_from_platform_config(
+    platform_config: dict[str, dict[str, object]],
+    default_profile_key: str,
+) -> dict[str, dict[str, str]]:
+    profiles: dict[str, dict[str, str]] = {}
+    for platform, values in platform_config.items():
+        mapping = values.get("profiles")
+        profile_mapping = {
+            str(profile_key): str(profile_name)
+            for profile_key, profile_name in mapping.items()
+            if profile_name
+        } if isinstance(mapping, dict) else {}
+        default_profile_name = str(values.get("profile_name") or "")
+        if default_profile_name and default_profile_key not in profile_mapping:
+            profile_mapping[default_profile_key] = default_profile_name
+        profiles[platform] = profile_mapping
+    return profiles
 
 
 def _load_json_object(raw_value: str, variable_name: str) -> dict[str, object]:
@@ -277,6 +303,8 @@ def _load_json_file_object(
     try:
         raw_value = path.read_text(encoding="utf-8")
     except OSError as exc:
+        if path.name.endswith(".local.json"):
+            return None
         raise ValueError(f"{variable_name} points to an unreadable file: {path}") from exc
     return _load_json_object(raw_value, variable_name)
 

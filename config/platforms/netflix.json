@@ -21,6 +21,7 @@
       "login_email": "input[name='userLoginId'], input[type='email']",
       "login_password": "input[name='password'], input[type='password']",
       "login_submit": "button[type='submit'], button:has-text('S’identifier'), button:has-text('Se connecter'), button:has-text('Sign In')",
+      "profile": "[data-uia='profile-link'], .profile-icon, .profile-name, button, a, [role='button']",
       "show_more": "button:has-text('Afficher plus'), button:has-text('Show More')"
     }
   }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import logging
 import sys
 import time
@@ -69,6 +70,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--platform",
         help="Run RPA for one platform only (e.g. netflix, prime_video, disney_plus, canal_plus, crunchyroll)",
+    )
+    parser.add_argument(
+        "--profile-key",
+        help="Run ingestion for one configured application profile key, e.g. default or junior.",
+    )
+    parser.add_argument(
+        "--all-profiles",
+        action="store_true",
+        help="Run RPA for every application profile that has a platform profile mapping.",
     )
     parser.add_argument(
         "--cdp-url",
@@ -190,11 +200,13 @@ def run(args: argparse.Namespace) -> None:
             ]
             if not platform_configs:
                 raise SystemExit(f"Unknown platform: {args.platform}")
-        for platform_config in platform_configs:
-            platform_config.content_type = args.content_type
-            profile_name = settings.rpa_profile_names.get(platform_config.name, "")
-            if profile_name.strip():
-                platform_config.profile_name = profile_name.strip()
+        platform_configs = expand_platform_profiles(
+            platform_configs,
+            settings,
+            selected_profile_key=args.profile_key,
+            all_profiles=args.all_profiles,
+            content_type=args.content_type,
+        )
         cdp_url = args.cdp_url or settings.rpa_cdp_url or None
         cdp_timeout_ms = args.cdp_timeout_ms or settings.rpa_cdp_timeout_ms
         if cdp_url and not args.no_auto_start_chrome:
@@ -239,6 +251,57 @@ def run(args: argparse.Namespace) -> None:
             logging.getLogger(__name__).warning(
                 "BetaSeries calendar skipped after ingestion: %s", exc
             )
+
+
+def expand_platform_profiles(
+    platform_configs,
+    settings: Settings,
+    *,
+    selected_profile_key: str | None,
+    all_profiles: bool,
+    content_type: str,
+):
+    if selected_profile_key and selected_profile_key not in settings.profiles:
+        raise SystemExit(f"Unknown profile key: {selected_profile_key}")
+
+    expanded = []
+    for platform_config in platform_configs:
+        platform_config.content_type = content_type
+        platform_profiles = settings.rpa_platform_profiles.get(platform_config.name, {})
+        profile_keys = _selected_profile_keys(
+            settings,
+            platform_profiles,
+            selected_profile_key=selected_profile_key,
+            all_profiles=all_profiles,
+        )
+        for profile_key in profile_keys:
+            profile = settings.profiles[profile_key]
+            profile_name = platform_profiles.get(profile_key, "")
+            if not profile_name:
+                profile_name = settings.rpa_profile_names.get(platform_config.name, "")
+            enriched = replace(
+                platform_config,
+                profile_key=profile.key,
+                suitable_for_junior=profile.is_junior,
+                profile_name=profile_name.strip() or platform_config.profile_name,
+            )
+            expanded.append(enriched)
+    return expanded
+
+
+def _selected_profile_keys(
+    settings: Settings,
+    platform_profiles: dict[str, str],
+    *,
+    selected_profile_key: str | None,
+    all_profiles: bool,
+) -> list[str]:
+    if selected_profile_key:
+        return [selected_profile_key]
+    if all_profiles:
+        keys = [key for key in settings.profiles if key in platform_profiles]
+        return keys or [settings.default_profile_key]
+    return [settings.default_profile_key]
 
 
 def ensure_chrome_cdp(

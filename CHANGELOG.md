@@ -2,6 +2,31 @@
 
 Tous les changements notables de ce projet sont documentés ici.
 
+## [0.5.0] - 2026-09-27
+
+### Ajouté
+
+- Matrice de profils de streaming par plateforme exposée dans l'API mobile.
+- Écran Android Admin listant les profils plateforme associés aux profils
+  applicatifs.
+- Options d'ingestion `--all-profiles` et `--profile-key` pour lancer le RPA sur
+  un ou plusieurs profils applicatifs.
+- Annotation des historiques RPA avec le profil applicatif actif.
+
+### Modifié
+
+- Le RPA tente de sélectionner le profil plateforme configuré sur les écrans de
+  sélection de profil Netflix, Prime Video, Disney+ et CANAL+.
+- Les exemples de configuration documentent maintenant `profiles` par
+  plateforme.
+- La collecte CANAL+ possède un fallback de sélecteurs pour la vue
+  `Mes vidéos > Vu récemment`.
+
+### Sécurité
+
+- Les fichiers `config/*.local.json` sont exclus du contexte Docker et copiés
+  dans un volume Docker de configuration via un outil dédié.
+
 ## [0.4.3] - 2026-09-27
 
 ### Corrigé

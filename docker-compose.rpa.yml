@@ -1,6 +1,6 @@
 services:
   rpa-job:
-    image: ${STREAMING_RPA_IMAGE:-rpa-streaming-rpa}:${STREAMING_RPA_TAG:-0.4.3}
+    image: ${STREAMING_RPA_IMAGE:-rpa-streaming-rpa}:${STREAMING_RPA_TAG:-0.5.0}
     build:
       context: .
       dockerfile: Dockerfile.rpa
@@ -24,12 +24,15 @@ services:
       - rpa-logs:/app/logs
       - rpa-artifacts:/app/artifacts
       - rpa-backups:/app/backups
-      - ./config:/app/config:ro
+      - streaming-web-config:/app/config:ro
 
 volumes:
   streaming-web-data:
     external: true
     name: rpa_streaming_streaming-web-data
+  streaming-web-config:
+    external: true
+    name: rpa_streaming_streaming-web-config
   rpa-state:
   rpa-logs:
   rpa-artifacts:

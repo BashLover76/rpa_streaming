@@ -2,27 +2,47 @@
   "crunchyroll": {
     "email": "",
     "password": "",
-    "profile_name": ""
+    "profile_name": "",
+    "profiles": {
+      "default": "",
+      "junior": ""
+    }
   },
   "netflix": {
     "email": "",
     "password": "",
-    "profile_name": ""
+    "profile_name": "",
+    "profiles": {
+      "default": "",
+      "junior": ""
+    }
   },
   "prime_video": {
     "email": "",
     "password": "",
-    "profile_name": ""
+    "profile_name": "",
+    "profiles": {
+      "default": "",
+      "junior": ""
+    }
   },
   "disney_plus": {
     "email": "",
     "password": "",
-    "profile_name": ""
+    "profile_name": "",
+    "profiles": {
+      "default": "",
+      "junior": ""
+    }
   },
   "canal_plus": {
     "email": "",
     "password": "",
-    "profile_name": ""
+    "profile_name": "",
+    "profiles": {
+      "default": "",
+      "junior": ""
+    }
   },
   "apple_tv_plus": {
     "email": "",
