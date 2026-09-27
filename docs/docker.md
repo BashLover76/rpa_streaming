@@ -17,17 +17,17 @@ La web app écoute sur `http://localhost:5000` par défaut.
 Les images Docker sont taguées explicitement. Les valeurs par défaut sont :
 
 ```text
-rpa-streaming-web:0.4.2
-rpa-streaming-rpa:0.4.2
+rpa-streaming-web:0.4.3
+rpa-streaming-rpa:0.4.3
 ```
 
 Tu peux surcharger les noms ou tags via `.env` :
 
 ```env
 STREAMING_WEB_IMAGE=rpa-streaming-web
-STREAMING_WEB_TAG=0.4.2
+STREAMING_WEB_TAG=0.4.3
 STREAMING_RPA_IMAGE=rpa-streaming-rpa
-STREAMING_RPA_TAG=0.4.2
+STREAMING_RPA_TAG=0.4.3
 ```
 
 Pour reconstruire une version précise :

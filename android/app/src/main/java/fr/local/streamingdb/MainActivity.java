@@ -55,7 +55,7 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private static final int DEFAULT_PAGE_SIZE = 10;
-    private static final String APP_VERSION = "0.4.2";
+    private static final String APP_VERSION = "0.4.3";
 
     private final ExecutorService executor = Executors.newFixedThreadPool(3);
     private final List<Screen> backStack = new ArrayList<>();
