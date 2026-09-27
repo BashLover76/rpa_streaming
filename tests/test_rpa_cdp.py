@@ -7,6 +7,8 @@ from unittest.mock import patch
 from ingestion.rpa_self_healing import (
     CDPConnectionError,
     SelfHealingRPA,
+    _cdp_playwright_headers,
+    _cdp_request_headers,
     _looks_like_selector,
 )
 
@@ -64,6 +66,19 @@ class CDPPreflightTest(unittest.TestCase):
         self.assertFalse(_looks_like_selector("selerctor"))
         self.assertFalse(_looks_like_selector("selector"))
         self.assertTrue(_looks_like_selector(".retableRow:has(a[href*='/title/'])"))
+
+    def test_cdp_host_header_formats_match_clients(self) -> None:
+        cdp_url = "http://host.docker.internal:9222"
+
+        self.assertEqual(
+            _cdp_request_headers(cdp_url),
+            {"Host": "127.0.0.1:9222"},
+        )
+        self.assertEqual(
+            _cdp_playwright_headers(cdp_url),
+            [{"name": "Host", "value": "127.0.0.1:9222"}],
+        )
+        self.assertEqual(_cdp_playwright_headers("http://127.0.0.1:9222"), [])
 
 
 if __name__ == "__main__":
