@@ -8,7 +8,7 @@ Le projet suit un versioning sémantique simple :
 - `MINOR` : nouvelle fonctionnalité compatible.
 - `PATCH` : correctif sans changement fonctionnel majeur.
 
-Version courante : `0.5.1`.
+Version courante : `0.6.0`.
 
 Les emplacements à mettre à jour ensemble sont :
 
@@ -38,7 +38,7 @@ feature/mobile-i18n
 feature/docker-versioning
 fix/mobile-resume-filter
 docs/security-versioning
-release/0.5.1
+release/0.6.0
 ```
 
 `main` ne reçoit pas de commits directs. Elle reçoit uniquement des merges

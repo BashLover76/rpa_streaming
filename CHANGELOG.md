@@ -2,6 +2,13 @@
 
 Tous les changements notables de ce projet sont documentés ici.
 
+## [0.6.0] - 2026-10-01
+
+### Modifié
+
+- L'image Docker web utilise un healthcheck Go statique à la place de .
+- Le runtime web évite l'installation de paquets système inutiles pour réduire la surface et accélérer le build incrémental.
+
 ## [0.5.1] - 2026-10-01
 
 ### Corrigé
