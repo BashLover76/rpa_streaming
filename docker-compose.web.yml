@@ -1,6 +1,6 @@
 services:
   streaming-web:
-    image: ${STREAMING_WEB_IMAGE:-rpa-streaming-web}:${STREAMING_WEB_TAG:-0.6.0}
+    image: ${STREAMING_WEB_IMAGE:-rpa-streaming-web}:${STREAMING_WEB_TAG:-0.7.0}
     build:
       context: .
       dockerfile: Dockerfile.web
@@ -14,8 +14,9 @@ services:
       STREAMING_DB_PATH: /data/streaming.db
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
       ADMIN_RPA_RUNNER: docker
-      ADMIN_RPA_COMPOSE_FILE: /app/docker-compose.rpa.yml
+      ADMIN_RPA_COMPOSE_FILE: /app/docker-compose.ingestion.yml
       ADMIN_RPA_DOCKER_SERVICE: rpa-job
+      ADMIN_RPA_CDP_URL: http://127.0.0.1:9222
       RPA_CDP_URL: ${RPA_CDP_URL_DOCKER:-http://host.docker.internal:9222}
     volumes:
       - streaming-web-data:/data

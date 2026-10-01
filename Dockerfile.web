@@ -33,6 +33,7 @@ COPY web_app.py .
 COPY main_ingestion.py .
 COPY Dockerfile.rpa .
 COPY docker-compose.rpa.yml .
+COPY docker-compose.ingestion.yml .
 
 EXPOSE 5000
 
