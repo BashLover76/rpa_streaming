@@ -1,13 +1,17 @@
 services:
   rpa-job:
-    image: ${STREAMING_RPA_IMAGE:-rpa-streaming-rpa}:${STREAMING_RPA_TAG:-0.5.0}
+    image: ${STREAMING_RPA_IMAGE:-rpa-streaming-rpa}:${STREAMING_RPA_TAG:-0.5.1}
     build:
       context: .
       dockerfile: Dockerfile.rpa
-    env_file:
-      - .env
     environment:
       STREAMING_DB_PATH: /data/streaming.db
+      BETASERIES_CONFIG_FILE: ${BETASERIES_CONFIG_FILE:-config/betaseries.local.json}
+      OLLAMA_CONFIG_FILE: ${OLLAMA_CONFIG_FILE:-config/ollama.local.json}
+      CRUNCHYROLL_CONFIG_FILE: ${CRUNCHYROLL_CONFIG_FILE:-config/crunchyroll.local.json}
+      STREAMING_PROFILES_FILE: ${STREAMING_PROFILES_FILE:-config/streaming_profiles.local.json}
+      STREAMING_PLATFORMS_FILE: ${STREAMING_PLATFORMS_FILE:-config/streaming_platforms.local.json}
+      STREAMING_PLATFORM_CONFIG_FILE: ${STREAMING_PLATFORM_CONFIG_FILE:-config/streaming_platform_config.local.json}
       RPA_CDP_URL: ${RPA_CDP_URL_DOCKER:-http://host.docker.internal:9222}
       RPA_CDP_PROXY: ${RPA_CDP_PROXY:-1}
       RPA_CDP_PROXY_PORT: ${RPA_CDP_PROXY_PORT:-9222}

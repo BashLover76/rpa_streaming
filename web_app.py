@@ -603,6 +603,7 @@ def create_app() -> Flask:
                 "profiles": profile_options(),
                 "default_profile_key": current_app.config["DEFAULT_PROFILE_KEY"],
                 "platform_profiles": platform_profile_options(),
+                "ingestion_statuses": fetch_mobile_ingestion_statuses(),
             }
         )
 
@@ -1139,6 +1140,110 @@ def fetch_admin_rpa_logs(limit: int = 3) -> list[dict[str, Any]]:
     ]
 
 
+def fetch_mobile_ingestion_statuses() -> list[dict[str, Any]]:
+    statuses: dict[str, dict[str, Any]] = {}
+    catalog_summary: dict[str, Any] | None = None
+    for timestamp, line in iter_ingestion_log_lines():
+        synced = re.search(r"RPA platform synced: ([a-z0-9_]+), inserted=(\d+)", line)
+        if synced:
+            platform = synced.group(1)
+            statuses[platform] = {
+                "platform": platform,
+                "platform_label": PLATFORM_LABELS.get(platform, platform),
+                "status": "ok",
+                "inserted": int(synced.group(2)),
+                "error": "",
+                "updated_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            continue
+        failed = re.search(r"RPA platform sync failed: ([a-z0-9_]+)", line)
+        if failed:
+            platform = failed.group(1)
+            statuses[platform] = {
+                "platform": platform,
+                "platform_label": PLATFORM_LABELS.get(platform, platform),
+                "status": "ko",
+                "inserted": 0,
+                "error": line.split("|")[-1].strip(),
+                "updated_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            continue
+        catalog = re.search(r"Catalog resolution: (\{.*\})", line)
+        if catalog:
+            catalog_summary = {
+                "raw": catalog.group(1),
+                "updated_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+    for timestamp, line in iter_admin_rpa_log_lines():
+        started = re.search(r"queued job started: ([a-z0-9_]+)", line)
+        if started:
+            platform = started.group(1)
+            statuses.setdefault(
+                platform,
+                {
+                    "platform": platform,
+                    "platform_label": PLATFORM_LABELS.get(platform, platform),
+                    "status": "ok",
+                    "inserted": 0,
+                    "error": "",
+                    "updated_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                },
+            )
+            continue
+        finished = re.search(r"queued job finished: ([a-z0-9_]+) rc=(\d+)", line)
+        if finished:
+            platform = finished.group(1)
+            failed = finished.group(2) != "0"
+            current = statuses.get(platform, {})
+            error = current.get("error", "")
+            statuses[platform] = {
+                "platform": platform,
+                "platform_label": PLATFORM_LABELS.get(platform, platform),
+                "status": "ko" if failed else current.get("status", "ok"),
+                "inserted": int(current.get("inserted", 0) or 0),
+                "error": error if failed else "",
+                "updated_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            continue
+        if "ERROR" in line or "env file" in line or "Traceback" in line:
+            platform = _platform_from_admin_log_line(line)
+            if platform:
+                current = statuses.get(platform, {})
+                statuses[platform] = {
+                    "platform": platform,
+                    "platform_label": PLATFORM_LABELS.get(platform, platform),
+                    "status": "ko",
+                    "inserted": int(current.get("inserted", 0) or 0),
+                    "error": line.split("|")[-1].strip(),
+                    "updated_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                }
+    items = sorted(statuses.values(), key=lambda item: item["platform_label"])
+    if catalog_summary is not None:
+        has_errors = (
+            "'errors': 0" not in catalog_summary["raw"]
+            and '"errors": 0' not in catalog_summary["raw"]
+        )
+        items.append(
+            {
+                "platform": "catalog",
+                "platform_label": "Catalogue",
+                "status": "ko" if has_errors else "ok",
+                "inserted": 0,
+                "error": catalog_summary["raw"] if has_errors else "",
+                "updated_at": catalog_summary["updated_at"],
+                "summary": catalog_summary["raw"],
+            }
+        )
+    return items
+
+
+def _platform_from_admin_log_line(line: str) -> str | None:
+    for platform in PLATFORM_LABELS:
+        if platform in line:
+            return platform
+    return None
+
+
 def tail_file(path: Path, *, lines: int) -> str:
     if not path.exists():
         return ""
@@ -1336,6 +1441,23 @@ def iter_ingestion_log_lines() -> list[tuple[datetime, str]]:
     return sorted(items, key=lambda item: item[0])
 
 
+def iter_admin_rpa_log_lines() -> list[tuple[datetime, str]]:
+    log_dir = Path("logs")
+    if not log_dir.exists():
+        return []
+    items: list[tuple[datetime, str]] = []
+    for path in sorted(log_dir.glob("admin-rpa-*.log")):
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            timestamp = parse_admin_log_timestamp(line)
+            if timestamp:
+                items.append((timestamp, line))
+    return sorted(items, key=lambda item: item[0])
+
+
 def parse_log_timestamp(line: str) -> datetime | None:
     match = re.match(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),(\d{3})", line)
     if not match:
@@ -1343,6 +1465,13 @@ def parse_log_timestamp(line: str) -> datetime | None:
     return datetime.strptime(
         f"{match.group(1)}.{match.group(2)}", "%Y-%m-%d %H:%M:%S.%f"
     )
+
+
+def parse_admin_log_timestamp(line: str) -> datetime | None:
+    match = re.match(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", line)
+    if not match:
+        return None
+    return datetime.strptime(match.group(1), "%Y-%m-%d %H:%M:%S")
 
 
 def format_duration(seconds: float) -> str:
