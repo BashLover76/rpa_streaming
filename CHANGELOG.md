@@ -2,6 +2,13 @@
 
 Tous les changements notables de ce projet sont documentés ici.
 
+## [0.7.4] - 2026-10-01
+
+### Corrigé
+
+- Le conteneur RPA diagnostique maintenant explicitement l'inaccessibilité du Chrome CDP hôte avant de lancer l'ingestion.
+- Les logs Docker indiquent la commande PowerShell attendue quand Chrome n'écoute pas sur `0.0.0.0:9222`.
+
 ## [0.7.3] - 2026-10-01
 
 ### Corrigé

@@ -159,6 +159,7 @@ $chrome = "$env:ProgramFiles\Google\Chrome\Application\chrome.exe"
 $profileDir = Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data'
 Start-Process $chrome -ArgumentList @(
   '--remote-debugging-port=9222',
+  '--remote-debugging-address=0.0.0.0',
   '--remote-allow-origins=*',
   "--user-data-dir=$profileDir"
 )
@@ -171,6 +172,7 @@ $chrome = "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
 $profileDir = Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data'
 Start-Process $chrome -ArgumentList @(
   '--remote-debugging-port=9222',
+  '--remote-debugging-address=0.0.0.0',
   '--remote-allow-origins=*',
   "--user-data-dir=$profileDir"
 )
@@ -181,6 +183,15 @@ verifie le port :
 
 ```bash
 curl http://127.0.0.1:9222/json/version
+```
+
+Depuis un conteneur Docker RPA, le port doit aussi être visible via
+`host.docker.internal`. Si ce test échoue, Chrome n'écoute probablement pas sur
+`0.0.0.0` :
+
+```bash
+docker compose --env-file .env -f docker-compose.rpa.yml run --rm rpa-job \
+  curl -fsS http://host.docker.internal:9222/json/version
 ```
 
 Lance ensuite le RPA en mode CDP :
@@ -386,6 +397,7 @@ Commande Windows/WSL validée pour démarrer Chrome manuellement en CDP:
 $profileDir = Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data'
 Start-Process chrome.exe -ArgumentList @(
   '--remote-debugging-port=9222',
+  '--remote-debugging-address=0.0.0.0',
   '--remote-allow-origins=*',
   "--user-data-dir=$profileDir"
 )
