@@ -18,17 +18,17 @@ La web app écoute sur `http://localhost:5000` par défaut.
 Les images Docker sont taguées explicitement. Les valeurs par défaut sont :
 
 ```text
-rpa-streaming-web:0.7.2
-rpa-streaming-rpa:0.7.2
+rpa-streaming-web:0.7.3
+rpa-streaming-rpa:0.7.3
 ```
 
 Tu peux surcharger les noms ou tags via `.env` :
 
 ```env
 STREAMING_WEB_IMAGE=rpa-streaming-web
-STREAMING_WEB_TAG=0.7.2
+STREAMING_WEB_TAG=0.7.3
 STREAMING_RPA_IMAGE=rpa-streaming-rpa
-STREAMING_RPA_TAG=0.7.2
+STREAMING_RPA_TAG=0.7.3
 ```
 
 Pour reconstruire une version précise :
@@ -154,6 +154,22 @@ les sélecteurs proposés par self-healing lorsqu'ils ciblent le formulaire de
 login. Le log admin affiche alors une erreur explicite : vérifie les identifiants
 et les profils dans `config/streaming_platform_config.local.json`, puis relance
 la plateforme.
+
+Pour les plateformes qui refusent la connexion headless, comme Netflix selon
+les comptes, utilise le Chrome Windows déjà authentifié avec le compose RPA
+historique. Le conteneur ouvre un proxy local `127.0.0.1:9222` vers
+`host.docker.internal:9222`, ce qui évite le problème WebSocket CDP retourné en
+`127.0.0.1` par Chrome :
+
+```bash
+docker compose --env-file .env -f docker-compose.rpa.yml run --rm rpa-job \
+  python main_ingestion.py \
+  --platform netflix \
+  --cdp-url http://127.0.0.1:9222 \
+  --rpa-mode differential \
+  --skip-crunchyroll-api \
+  --no-auto-start-chrome
+```
 
 ### Rejouer une ingestion Docker
 

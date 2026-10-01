@@ -2,6 +2,13 @@
 
 Tous les changements notables de ce projet sont documentés ici.
 
+## [0.7.3] - 2026-10-01
+
+### Corrigé
+
+- Le compose RPA historique cible par défaut le proxy CDP local du conteneur (`127.0.0.1:9222`) vers le Chrome hôte.
+- Documentation ajoutée pour relancer Netflix avec le Chrome Windows déjà authentifié quand le Chrome Docker headless reste bloqué sur la page de connexion.
+
 ## [0.7.2] - 2026-10-01
 
 ### Corrigé
