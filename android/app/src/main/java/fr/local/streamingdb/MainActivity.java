@@ -35,6 +35,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -55,7 +56,7 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private static final int DEFAULT_PAGE_SIZE = 10;
-    private static final String APP_VERSION = "0.5.1";
+    private static final String APP_VERSION = "0.6.0";
 
     private final ExecutorService executor = Executors.newFixedThreadPool(3);
     private final List<Screen> backStack = new ArrayList<>();
@@ -530,9 +531,9 @@ public class MainActivity extends Activity {
         addAdminSettings();
         addAdminKpis();
         addIngestionStatuses();
+        addRpaControls();
         addDebugLog();
         addMessage(tr("app_version") + ": " + APP_VERSION);
-        addMessage(tr("rpa_web_only"));
     }
 
     private void addAdminSettings() {
@@ -710,6 +711,34 @@ public class MainActivity extends Activity {
         content.addView(card);
     }
 
+    private void addRpaControls() {
+        addSection(tr("rpa_restart"));
+        LinearLayout panel = card();
+        JSONObject bootstrap = cachedJson("bootstrap");
+        JSONArray platforms = bootstrap == null ? null : bootstrap.optJSONArray("rpa_platforms");
+        if (platforms == null || platforms.length() == 0) {
+            panel.addView(line(tr("rpa_no_platforms")));
+            Button reload = button(tr("load_profiles"), true);
+            reload.setOnClickListener(v -> refreshBootstrapOnly());
+            panel.addView(reload);
+            content.addView(panel);
+            return;
+        }
+        for (int index = 0; index < platforms.length(); index++) {
+            JSONObject item = platforms.optJSONObject(index);
+            if (item == null) continue;
+            String platform = item.optString("platform", "");
+            if (platform.isEmpty()) continue;
+            Button run = button(platformLabel(platform), false);
+            run.setTextColor(Color.rgb(8, 16, 24));
+            run.setBackground(rounded(platformColor(platform), platformColor(platform), 8));
+            run.setContentDescription(tr("rpa_restart") + ": " + platformLabel(platform));
+            run.setOnClickListener(v -> triggerRpa(platform));
+            panel.addView(run);
+        }
+        content.addView(panel);
+    }
+
     private LinearLayout kpiCard(String label, int count) {
         LinearLayout card = card();
         card.addView(titleText(label, 16));
@@ -815,6 +844,32 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void triggerRpa(String platform) {
+        prefs.edit().putString("server_url", normalizedServerUrl()).apply();
+        progress.setVisibility(ProgressBar.VISIBLE);
+        executor.submit(() -> {
+            try {
+                JSONObject response = postSync("/api/mobile/rpa/" + url(platform) + "/run");
+                JSONObject bootstrap = fetchSync("/api/mobile/bootstrap");
+                writeCacheJson("bootstrap", bootstrap);
+                String message = tr("rpa_queued") + ": "
+                        + platformLabel(platform)
+                        + " · "
+                        + response.optString("log", "");
+                runOnUiThread(() -> {
+                    progress.setVisibility(ProgressBar.GONE);
+                    Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+                    render(Screen.admin());
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    progress.setVisibility(ProgressBar.GONE);
+                    Toast.makeText(this, tr("rpa_failed") + ": " + error.getMessage(), Toast.LENGTH_LONG).show();
+                });
+            }
+        });
+    }
+
     private JSONObject fetchAllTitles(String type, JSONObject firstPage) throws Exception {
         JSONArray merged = new JSONArray();
         appendItems(merged, firstPage.optJSONArray("items"));
@@ -873,6 +928,28 @@ public class MainActivity extends Activity {
         connection.setConnectTimeout(5000);
         connection.setReadTimeout(20000);
         connection.setRequestProperty("Accept", "application/json");
+        int status = connection.getResponseCode();
+        InputStream responseStream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+        if (responseStream == null) throw new IllegalStateException("HTTP " + status);
+        BufferedReader reader = new BufferedReader(new InputStreamReader(responseStream, StandardCharsets.UTF_8));
+        StringBuilder body = new StringBuilder();
+        String line;
+        while ((line = reader.readLine()) != null) body.append(line);
+        if (status >= 400) throw new IllegalStateException("HTTP " + status + ": " + body);
+        return new JSONObject(body.toString());
+    }
+
+    private JSONObject postSync(String path) throws Exception {
+        URL endpoint = new URL(normalizedServerUrl() + path);
+        HttpURLConnection connection = (HttpURLConnection) endpoint.openConnection();
+        connection.setConnectTimeout(5000);
+        connection.setReadTimeout(20000);
+        connection.setRequestMethod("POST");
+        connection.setRequestProperty("Accept", "application/json");
+        connection.setDoOutput(true);
+        try (OutputStream output = connection.getOutputStream()) {
+            output.write(new byte[0]);
+        }
         int status = connection.getResponseCode();
         InputStream responseStream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
         if (responseStream == null) throw new IllegalStateException("HTTP " + status);
@@ -1092,7 +1169,10 @@ public class MainActivity extends Activity {
             case "resume": return "Reprendre";
             case "resume_empty": return "Aucun titre en cours dans le cache offline.";
             case "rows_hint": return "Lignes max par page";
-            case "rpa_web_only": return "Le RPA reste volontairement réservé à l'interface web.";
+            case "rpa_failed": return "Relance RPA impossible";
+            case "rpa_no_platforms": return "Aucune plateforme RPA configurée.";
+            case "rpa_queued": return "RPA ajouté à la file";
+            case "rpa_restart": return "Relance RPA";
             case "save": return "Enregistrer";
             case "save_display": return "Enregistrer l'affichage";
             case "search_offline": return "Rechercher dans le cache offline";
@@ -1154,7 +1234,10 @@ public class MainActivity extends Activity {
             case "resume": return "Resume";
             case "resume_empty": return "No in-progress title in offline cache.";
             case "rows_hint": return "Max rows per page";
-            case "rpa_web_only": return "RPA remains intentionally available only in the web UI.";
+            case "rpa_failed": return "Unable to queue RPA";
+            case "rpa_no_platforms": return "No RPA platform configured.";
+            case "rpa_queued": return "RPA queued";
+            case "rpa_restart": return "Restart RPA";
             case "save": return "Save";
             case "save_display": return "Save display";
             case "search_offline": return "Search offline cache";
@@ -1216,7 +1299,10 @@ public class MainActivity extends Activity {
             case "resume": return "Reanudar";
             case "resume_empty": return "No hay títulos en curso en la caché offline.";
             case "rows_hint": return "Filas max por página";
-            case "rpa_web_only": return "El RPA queda reservado a la interfaz web.";
+            case "rpa_failed": return "No se puede relanzar RPA";
+            case "rpa_no_platforms": return "Ninguna plataforma RPA configurada.";
+            case "rpa_queued": return "RPA añadido a la cola";
+            case "rpa_restart": return "Relanzar RPA";
             case "save": return "Guardar";
             case "save_display": return "Guardar visualización";
             case "search_offline": return "Buscar en caché offline";

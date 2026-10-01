@@ -193,6 +193,7 @@ def create_app() -> Flask:
     app.config["STREAMING_PROFILES"] = settings.profiles
     app.config["DEFAULT_PROFILE_KEY"] = settings.default_profile_key
     app.config["STREAMING_PLATFORM_PROFILES"] = settings.rpa_platform_profiles
+    app.config["STREAMING_PLATFORMS"] = settings.streaming_platforms
 
     @app.teardown_appcontext
     def close_db(_error: BaseException | None = None) -> None:
@@ -603,7 +604,26 @@ def create_app() -> Flask:
                 "profiles": profile_options(),
                 "default_profile_key": current_app.config["DEFAULT_PROFILE_KEY"],
                 "platform_profiles": platform_profile_options(),
+                "rpa_platforms": fetch_admin_platforms(),
                 "ingestion_statuses": fetch_mobile_ingestion_statuses(),
+            }
+        )
+
+    @app.get("/api/mobile/rpa/platforms")
+    def api_mobile_rpa_platforms():
+        return jsonify({"platforms": fetch_admin_platforms()})
+
+    @app.post("/api/mobile/rpa/<platform>/run")
+    def api_mobile_run_rpa(platform: str):
+        known_platforms = {item["platform"] for item in fetch_admin_platforms()}
+        if platform not in known_platforms:
+            abort(404)
+        job = enqueue_rpa_platform(platform)
+        return jsonify(
+            {
+                "status": "queued",
+                "platform": platform,
+                "log": Path(job["log_path"]).name,
             }
         )
 
@@ -1020,6 +1040,7 @@ def fetch_admin_movies(search_term: str = "") -> list[dict[str, Any]]:
 
 
 def fetch_admin_platforms() -> list[dict[str, str]]:
+    enabled = current_app.config.get("STREAMING_PLATFORMS", {})
     config_dir = Path("config/platforms")
     platforms = []
     if config_dir.exists():
@@ -1029,6 +1050,8 @@ def fetch_admin_platforms() -> list[dict[str, str]]:
             except json.JSONDecodeError:
                 continue
             name = payload.get("name") or path.stem
+            if not enabled.get(name, False):
+                continue
             platforms.append(
                 {"platform": name, "label": PLATFORM_LABELS.get(name, name)}
             )
