@@ -2,6 +2,18 @@
 
 Tous les changements notables de ce projet sont documentés ici.
 
+## [0.8.0] - 2026-10-01
+
+### Ajouté
+
+- Pont de session navigateur optionnel : export du `storage_state` depuis le Chrome CDP local et import dans les jobs RPA Docker.
+- Outil `tools.export_chrome_storage_state` pour sauvegarder cookies et localStorage depuis une session Chrome déjà authentifiée.
+- Outil `tools.sync_storage_state_to_docker_volume` pour copier le `storage_state` dans le volume Docker RPA.
+
+### Sécurité
+
+- Les cookies exportés restent désactivés par défaut et doivent être placés dans `.continue/`, dossier ignoré par Git.
+
 ## [0.7.4] - 2026-10-01
 
 ### Corrigé

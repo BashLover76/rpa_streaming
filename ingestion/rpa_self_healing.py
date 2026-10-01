@@ -86,6 +86,7 @@ class SelfHealingRPA:
         rpa_mode: str = "full",
         differential_known_threshold: int = 20,
         credentials: dict[str, dict[str, str]] | None = None,
+        storage_state_path: Path | None = None,
     ) -> None:
         self.db = db
         self.ollama = ollama
@@ -99,6 +100,7 @@ class SelfHealingRPA:
         self.rpa_mode = rpa_mode
         self.differential_known_threshold = differential_known_threshold
         self.credentials = credentials or {}
+        self.storage_state_path = storage_state_path
 
     def run_platforms(self, platform_configs: list[PlatformConfig]) -> dict[str, int]:
         results: dict[str, int] = {}
@@ -138,6 +140,7 @@ class SelfHealingRPA:
                 args=chromium_args,
             )
             try:
+                self._import_storage_state_if_configured(context)
                 for platform_config in platform_configs:
                     page = context.new_page()
                     try:
@@ -182,6 +185,7 @@ class SelfHealingRPA:
         context = browser.contexts[0]
         results: dict[str, int] = {}
         try:
+            self._import_storage_state_if_configured(context)
             if (
                 any(
                     platform_config.requires_browser_extension
@@ -211,6 +215,65 @@ class SelfHealingRPA:
         finally:
             browser.close()
         return results
+
+    def _import_storage_state_if_configured(self, context: Any) -> None:
+        if not self.storage_state_path:
+            return
+        if not self.storage_state_path.exists():
+            LOGGER.warning(
+                "RPA storage state file not found: %s", self.storage_state_path
+            )
+            return
+        try:
+            state = json.loads(self.storage_state_path.read_text(encoding="utf-8"))
+            cookies = state.get("cookies") if isinstance(state, dict) else None
+            if isinstance(cookies, list) and cookies:
+                context.add_cookies(cookies)
+            self._import_storage_origins(context, state)
+            LOGGER.info(
+                "RPA storage state imported: %s cookies from %s",
+                len(cookies or []),
+                self.storage_state_path,
+            )
+        except Exception:
+            LOGGER.exception("Unable to import RPA storage state")
+
+    @staticmethod
+    def _import_storage_origins(context: Any, state: dict[str, Any]) -> None:
+        origins = state.get("origins")
+        if not isinstance(origins, list):
+            return
+        page = context.new_page()
+        try:
+            for origin in origins:
+                if not isinstance(origin, dict):
+                    continue
+                origin_url = str(origin.get("origin") or "")
+                local_storage = origin.get("localStorage")
+                if not origin_url.startswith(("http://", "https://")):
+                    continue
+                if not isinstance(local_storage, list) or not local_storage:
+                    continue
+                try:
+                    page.goto(origin_url, wait_until="domcontentloaded", timeout=30_000)
+                    page.evaluate(
+                        """items => {
+                            for (const item of items) {
+                                if (item && typeof item.name === 'string') {
+                                    localStorage.setItem(item.name, String(item.value ?? ''));
+                                }
+                            }
+                        }""",
+                        local_storage,
+                    )
+                except Exception:
+                    LOGGER.debug(
+                        "Unable to import localStorage for origin %s",
+                        origin_url,
+                        exc_info=True,
+                    )
+        finally:
+            page.close()
 
     def _preflight_cdp_endpoint(self) -> None:
         if not self.cdp_url:

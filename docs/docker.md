@@ -18,17 +18,17 @@ La web app écoute sur `http://localhost:5000` par défaut.
 Les images Docker sont taguées explicitement. Les valeurs par défaut sont :
 
 ```text
-rpa-streaming-web:0.7.4
-rpa-streaming-rpa:0.7.4
+rpa-streaming-web:0.8.0
+rpa-streaming-rpa:0.8.0
 ```
 
 Tu peux surcharger les noms ou tags via `.env` :
 
 ```env
 STREAMING_WEB_IMAGE=rpa-streaming-web
-STREAMING_WEB_TAG=0.7.4
+STREAMING_WEB_TAG=0.8.0
 STREAMING_RPA_IMAGE=rpa-streaming-rpa
-STREAMING_RPA_TAG=0.7.4
+STREAMING_RPA_TAG=0.8.0
 ```
 
 Pour reconstruire une version précise :
@@ -179,6 +179,49 @@ volume Docker partagé :
 ```bash
 python tools/sync_config_to_docker_volume.py
 ```
+
+### Partager la session Chrome locale avec Chrome Docker
+
+Le dossier de profil Chrome Windows ne doit pas être monté directement dans le
+conteneur : les cookies y sont chiffrés par Windows et le profil peut être
+verrouillé. Pour initialiser les connexions localement puis les réutiliser dans
+le Chrome Docker, exporte plutôt le `storage_state` Playwright depuis Chrome CDP.
+
+1. Lance Chrome Windows avec CDP et connecte-toi aux plateformes.
+
+```powershell
+powershell.exe -NoProfile -Command "Start-Process chrome.exe '--remote-debugging-port=9222 --remote-debugging-address=0.0.0.0 --remote-allow-origins=* --user-data-dir=$env:LOCALAPPDATA\Google\Chrome\User Data'"
+```
+
+2. Depuis WSL, exporte les cookies/localStorage du Chrome local :
+
+```bash
+python -m tools.export_chrome_storage_state \
+  --cdp-url http://127.0.0.1:9222 \
+  --output .continue/browser-storage-state.json
+```
+
+3. Copie cet état dans le volume Docker RPA :
+
+```bash
+python -m tools.sync_storage_state_to_docker_volume \
+  --source .continue/browser-storage-state.json
+```
+
+4. Lance l'ingestion Docker. Le job importe automatiquement
+`/app/.continue/browser-storage-state.json` si le fichier existe :
+
+```bash
+docker compose --env-file .env -f docker-compose.ingestion.yml run --rm rpa-job \
+  python main_ingestion.py \
+  --platform netflix \
+  --cdp-url http://127.0.0.1:9222 \
+  --rpa-mode differential \
+  --skip-crunchyroll-api
+```
+
+Ce fichier contient des cookies de session. Ne le copie pas hors de la machine,
+ne le commit jamais et régénère-le si une plateforme invalide la session.
 
 Relancer toutes les plateformes en différentiel :
 
