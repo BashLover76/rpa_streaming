@@ -519,6 +519,19 @@ docker compose --env-file .env -f docker-compose.rpa.yml run --rm rpa-job \
   --no-auto-start-chrome
 ```
 
+Alternative pour le Chrome Docker dédié : exporte les cookies/localStorage du
+Chrome local dans un `storage_state`, puis synchronise ce fichier dans le volume
+RPA. Le Chrome Docker importera cet état au démarrage du job.
+
+```bash
+python -m tools.export_chrome_storage_state \
+  --cdp-url http://127.0.0.1:9222 \
+  --output .continue/browser-storage-state.json
+
+python -m tools.sync_storage_state_to_docker_volume \
+  --source .continue/browser-storage-state.json
+```
+
 ## Verification rapide
 
 ```bash

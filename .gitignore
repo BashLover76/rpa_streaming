@@ -21,3 +21,4 @@ android/local.properties
 android/.gradle/
 android/**/build/
 .continue/ingestion.lock
+.continue/*.json

@@ -1,6 +1,6 @@
 services:
   rpa-job:
-    image: ${STREAMING_RPA_IMAGE:-rpa-streaming-rpa}:${STREAMING_RPA_TAG:-0.7.4}
+    image: ${STREAMING_RPA_IMAGE:-rpa-streaming-rpa}:${STREAMING_RPA_TAG:-0.8.0}
     build:
       context: .
       dockerfile: Dockerfile.rpa
@@ -16,6 +16,7 @@ services:
       RPA_CDP_PROXY: ${RPA_CDP_PROXY:-1}
       RPA_CDP_PROXY_PORT: ${RPA_CDP_PROXY_PORT:-9222}
       RPA_CDP_PROXY_TARGET: ${RPA_CDP_PROXY_TARGET:-host.docker.internal:9222}
+      RPA_STORAGE_STATE_PATH: ${RPA_STORAGE_STATE_PATH_DOCKER:-/app/.continue/browser-storage-state.json}
       RPA_OLLAMA_PROXY: ${RPA_OLLAMA_PROXY:-1}
       RPA_OLLAMA_PROXY_PORT: ${RPA_OLLAMA_PROXY_PORT:-11434}
       RPA_OLLAMA_PROXY_TARGET: ${RPA_OLLAMA_PROXY_TARGET:-host.docker.internal:11434}

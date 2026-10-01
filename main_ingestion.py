@@ -227,6 +227,7 @@ def run(args: argparse.Namespace) -> None:
             rpa_mode=args.rpa_mode,
             differential_known_threshold=args.rpa_differential_known_threshold,
             credentials=settings.rpa_credentials,
+            storage_state_path=settings.rpa_storage_state_path,
         )
         rpa.run_platforms(platform_configs)
 

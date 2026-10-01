@@ -35,6 +35,7 @@ class Settings:
     rpa_browser_extension_path: Path | None
     rpa_cdp_url: str
     rpa_cdp_timeout_ms: int
+    rpa_storage_state_path: Path | None
     admin_token: str
     crunchyroll_email: str
     crunchyroll_password: str
@@ -84,6 +85,7 @@ class Settings:
             rpa_browser_extension_path=Path(extension_path) if extension_path else None,
             rpa_cdp_url=os.getenv("RPA_CDP_URL", "").strip(),
             rpa_cdp_timeout_ms=int(os.getenv("RPA_CDP_TIMEOUT_MS", "30000")),
+            rpa_storage_state_path=_optional_path("RPA_STORAGE_STATE_PATH"),
             admin_token=os.getenv("ADMIN_TOKEN", "").strip(),
             crunchyroll_email=crunchyroll["email"],
             crunchyroll_password=crunchyroll["password"],
@@ -407,6 +409,11 @@ def _load_default_profile_key(profiles: dict[str, StreamingProfile]) -> str:
 
 def _env_bool(name: str) -> bool:
     return _parse_bool(os.getenv(name, ""))
+
+
+def _optional_path(name: str) -> Path | None:
+    value = os.getenv(name, "").strip()
+    return Path(value) if value else None
 
 
 def _parse_bool(value: str) -> bool:
