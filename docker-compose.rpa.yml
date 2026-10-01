@@ -1,6 +1,6 @@
 services:
   rpa-job:
-    image: ${STREAMING_RPA_IMAGE:-rpa-streaming-rpa}:${STREAMING_RPA_TAG:-0.7.2}
+    image: ${STREAMING_RPA_IMAGE:-rpa-streaming-rpa}:${STREAMING_RPA_TAG:-0.7.3}
     build:
       context: .
       dockerfile: Dockerfile.rpa
@@ -12,7 +12,7 @@ services:
       STREAMING_PROFILES_FILE: ${STREAMING_PROFILES_FILE:-config/streaming_profiles.local.json}
       STREAMING_PLATFORMS_FILE: ${STREAMING_PLATFORMS_FILE:-config/streaming_platforms.local.json}
       STREAMING_PLATFORM_CONFIG_FILE: ${STREAMING_PLATFORM_CONFIG_FILE:-config/streaming_platform_config.local.json}
-      RPA_CDP_URL: ${RPA_CDP_URL_DOCKER:-http://host.docker.internal:9222}
+      RPA_CDP_URL: ${RPA_CDP_URL_DOCKER:-http://127.0.0.1:9222}
       RPA_CDP_PROXY: ${RPA_CDP_PROXY:-1}
       RPA_CDP_PROXY_PORT: ${RPA_CDP_PROXY_PORT:-9222}
       RPA_CDP_PROXY_TARGET: ${RPA_CDP_PROXY_TARGET:-host.docker.internal:9222}
