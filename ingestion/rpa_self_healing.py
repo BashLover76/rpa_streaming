@@ -1017,6 +1017,13 @@ class SelfHealingRPA:
         """
         if config.name == "canal_plus":
             return
+        if self._page_looks_like_antibot_challenge(page):
+            raise RuntimeError(
+                f"{config.name} is showing an anti-bot verification page instead of "
+                "the history page. Complete the challenge in an interactive Chrome "
+                "session, export a fresh storage state, or run this platform through "
+                "the host Chrome CDP compose."
+            )
         history_selector = config.selectors.get("history_container")
         if self._selector_is_visible(page, history_selector, timeout_ms=2_000):
             return
@@ -1032,6 +1039,13 @@ class SelfHealingRPA:
                     exc,
                 )
 
+        if self._page_looks_like_antibot_challenge(page):
+            raise RuntimeError(
+                f"{config.name} is showing an anti-bot verification page instead of "
+                "the history page. Complete the challenge in an interactive Chrome "
+                "session, export a fresh storage state, or run this platform through "
+                "the host Chrome CDP compose."
+            )
         if self._page_looks_like_login(page, config):
             raise RuntimeError(
                 f"{config.name} is still on an authentication page after RPA login. "
@@ -1060,6 +1074,28 @@ class SelfHealingRPA:
         return any(
             self._selector_is_visible(page, selector, timeout_ms=500)
             for selector in login_selectors
+        )
+
+    @staticmethod
+    def _page_looks_like_antibot_challenge(page: Page) -> bool:
+        try:
+            title = page.title()
+        except Exception:
+            title = ""
+        body_sample = ""
+        try:
+            body_sample = page.locator("body").inner_text(timeout=1_000)[:1000]
+        except Exception:
+            pass
+        evidence = f"{title}\n{body_sample}"
+        return bool(
+            re.search(
+                r"just a moment|checking your browser|verify you are human|"
+                r"v[eé]rification|cloudflare|cf-browser-verification|"
+                r"turnstile|challenge-platform",
+                evidence,
+                re.I,
+            )
         )
 
     @staticmethod
@@ -1269,6 +1305,10 @@ DOM:
         if self._page_looks_like_login(page, config):
             raise ValueError(
                 "Refusing self-healing while the page still looks like authentication UI"
+            )
+        if self._page_looks_like_antibot_challenge(page):
+            raise ValueError(
+                "Refusing self-healing while the page still looks like anti-bot verification"
             )
         if selector_key == "history_rows":
             candidate_count = page.locator(selector).count()

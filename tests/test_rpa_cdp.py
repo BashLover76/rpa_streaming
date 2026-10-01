@@ -29,6 +29,17 @@ class _Response:
         return self.payload
 
 
+class _ChallengePage:
+    def title(self) -> str:
+        return "Just a moment..."
+
+    def locator(self, _selector: str) -> "_ChallengePage":
+        return self
+
+    def inner_text(self, timeout: int = 0) -> str:
+        return "Checking your browser before accessing Crunchyroll."
+
+
 class CDPPreflightTest(unittest.TestCase):
     def test_preflight_rejects_endpoint_without_websocket_url(self) -> None:
         rpa = SelfHealingRPA(
@@ -127,6 +138,11 @@ class CDPPreflightTest(unittest.TestCase):
         self.assertNotIn("partitionKey", cookies[0])
         self.assertNotIn("_crHasCrossSiteAncestor", cookies[0])
         self.assertEqual(cookies[0]["expires"], 123.0)
+
+    def test_antibot_challenge_is_detected(self) -> None:
+        self.assertTrue(
+            SelfHealingRPA._page_looks_like_antibot_challenge(_ChallengePage())
+        )
 
 
 if __name__ == "__main__":
