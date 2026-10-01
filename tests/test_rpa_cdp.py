@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from ingestion.rpa_self_healing import (
     CDPConnectionError,
+    PlatformConfig,
     SelfHealingRPA,
     _cdp_playwright_headers,
     _cdp_request_headers,
@@ -79,6 +80,29 @@ class CDPPreflightTest(unittest.TestCase):
             [{"name": "Host", "value": "127.0.0.1:9222"}],
         )
         self.assertEqual(_cdp_playwright_headers("http://127.0.0.1:9222"), [])
+
+    def test_history_self_healing_rejects_login_selectors(self) -> None:
+        rpa = SelfHealingRPA(
+            db=object(),
+            ollama=object(),
+            user_data_dir=Path(".playwright-profile"),
+        )
+        config = PlatformConfig(
+            name="netflix",
+            start_url="https://www.netflix.com/viewingactivity",
+            selectors={},
+            strict_history_scope=True,
+        )
+
+        with self.assertRaises(ValueError) as raised:
+            rpa._validate_history_selector_candidate(
+                page=object(),
+                config=config,
+                selector_key="history_container",
+                selector="input[name='userLoginId']",
+            )
+
+        self.assertIn("authentication UI", str(raised.exception))
 
 
 if __name__ == "__main__":

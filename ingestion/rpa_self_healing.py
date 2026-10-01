@@ -251,6 +251,7 @@ class SelfHealingRPA:
         self._optional_click(page, config, "cookie_accept")
         self._login_if_needed(page, config)
         self._select_profile_if_needed(page, config)
+        self._ensure_history_page_ready(page, config)
         if config.name == "canal_plus":
             return self._run_canal_plus_platform(page, config)
         try:
@@ -926,6 +927,13 @@ class SelfHealingRPA:
             page.wait_for_timeout(max(3_000, config.wait_after_login_seconds * 1000))
             page.goto(config.start_url, wait_until="domcontentloaded", timeout=60_000)
             page.wait_for_timeout(2_000)
+            if self._page_looks_like_login(page, config):
+                LOGGER.warning(
+                    "%s RPA login did not leave the authentication page; "
+                    "history extraction will be skipped unless the session is authenticated.",
+                    config.name,
+                )
+                return
             LOGGER.info("%s RPA login completed; continuing ingestion.", config.name)
         except Exception as exc:
             LOGGER.warning(
@@ -933,6 +941,61 @@ class SelfHealingRPA:
                 config.name,
                 exc,
             )
+
+    def _ensure_history_page_ready(self, page: Page, config: PlatformConfig) -> None:
+        """Ensure the browser is on an authenticated history surface before extraction.
+
+        Self-healing is useful when a platform renames history cards. It should
+        not try to heal selectors while the browser is still on a login,
+        profile-selection, or marketing page: that produces plausible but wrong
+        selectors such as the email input on Netflix.
+        """
+        if config.name == "canal_plus":
+            return
+        history_selector = config.selectors.get("history_container")
+        if self._selector_is_visible(page, history_selector, timeout_ms=2_000):
+            return
+
+        if _same_origin(page.url, config.start_url):
+            try:
+                page.goto(config.start_url, wait_until="domcontentloaded", timeout=60_000)
+                page.wait_for_timeout(2_000)
+            except Exception as exc:
+                LOGGER.warning(
+                    "%s could not reload history page before extraction: %s",
+                    config.name,
+                    exc,
+                )
+
+        if self._page_looks_like_login(page, config):
+            raise RuntimeError(
+                f"{config.name} is still on an authentication page after RPA login. "
+                "Check credentials, MFA/profile prompts, or run this platform once "
+                "interactively before retrying ingestion."
+            )
+
+    def _page_looks_like_login(self, page: Page, config: PlatformConfig) -> bool:
+        login_selectors = [
+            config.selectors.get("login_email"),
+            config.selectors.get("login_password"),
+            "input[type='password']",
+            "input[name*='login' i]",
+            "input[name*='email' i]",
+        ]
+        try:
+            url = page.url.lower()
+            title = page.title().lower()
+        except Exception:
+            url = ""
+            title = ""
+        if any(marker in url for marker in ("/login", "/signin", "/sign-in", "/auth")):
+            return True
+        if re.search(r"\b(login|sign in|signin|connexion|identifier)\b", title, re.I):
+            return True
+        return any(
+            self._selector_is_visible(page, selector, timeout_ms=500)
+            for selector in login_selectors
+        )
 
     @staticmethod
     def _selector_is_visible(
@@ -1084,6 +1147,11 @@ DOM:
         selector = result["selector"].strip()
         if not _looks_like_selector(selector):
             raise ValueError(f"Ollama returned an implausible selector: {selector}")
+        if config.strict_history_scope and selector_key in {
+            "history_container",
+            "history_rows",
+        }:
+            self._validate_history_selector_candidate(page, config, selector_key, selector)
         # Never commit an invented selector until the live DOM validates it.
         page.locator(selector).first.wait_for(state=config.selector_state, timeout=5000)
         if config.strict_history_scope and selector_key == "history_rows":
@@ -1108,6 +1176,39 @@ DOM:
             result.get("reason", "no reason"),
         )
         return selector
+
+    def _validate_history_selector_candidate(
+        self,
+        page: Page,
+        config: PlatformConfig,
+        selector_key: str,
+        selector: str,
+    ) -> None:
+        rejected_fragments = (
+            "input",
+            "textarea",
+            "password",
+            "userloginid",
+            "login",
+            "signin",
+            "sign-in",
+            "email",
+            "submit",
+            "button[type='submit']",
+        )
+        normalized_selector = selector.lower()
+        if any(fragment in normalized_selector for fragment in rejected_fragments):
+            raise ValueError(
+                f"Refusing healed history selector that targets authentication UI: {selector}"
+            )
+        if self._page_looks_like_login(page, config):
+            raise ValueError(
+                "Refusing self-healing while the page still looks like authentication UI"
+            )
+        if selector_key == "history_rows":
+            candidate_count = page.locator(selector).count()
+            if candidate_count == 0:
+                raise ValueError(f"Healed selector returned no history rows: {selector}")
 
     def _extract_history_with_vision(
         self,
@@ -1430,6 +1531,16 @@ def _safe_page_url(url: str) -> str:
     if not parsed.scheme or not parsed.netloc:
         return "[invalid-url]"
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+
+
+def _same_origin(current_url: str, expected_url: str) -> bool:
+    current = urlsplit(current_url)
+    expected = urlsplit(expected_url)
+    return (
+        bool(current.scheme and current.netloc)
+        and current.scheme == expected.scheme
+        and current.netloc == expected.netloc
+    )
 
 
 def _cdp_recovery_message(cdp_url: str | None) -> str:

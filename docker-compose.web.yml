@@ -1,6 +1,6 @@
 services:
   streaming-web:
-    image: ${STREAMING_WEB_IMAGE:-rpa-streaming-web}:${STREAMING_WEB_TAG:-0.7.1}
+    image: ${STREAMING_WEB_IMAGE:-rpa-streaming-web}:${STREAMING_WEB_TAG:-0.7.2}
     build:
       context: .
       dockerfile: Dockerfile.web
