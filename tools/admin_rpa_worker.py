@@ -82,7 +82,7 @@ def build_rpa_command(platform: str) -> list[str]:
             "--platform",
             platform,
             "--cdp-url",
-            os.getenv("RPA_CDP_URL", "http://host.docker.internal:9222"),
+            os.getenv("ADMIN_RPA_CDP_URL", "http://127.0.0.1:9222"),
             "--rpa-mode",
             "differential",
             "--skip-crunchyroll-api",

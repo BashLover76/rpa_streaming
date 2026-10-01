@@ -2,6 +2,17 @@
 
 Tous les changements notables de ce projet sont documentés ici.
 
+## [0.7.0] - 2026-10-01
+
+### Ajouté
+
+- Compose d'ingestion dedie avec un conteneur Chrome CDP separe du conteneur RPA.
+- Les relances RPA depuis l'administration web utilisent le compose d'ingestion conteneurise par defaut.
+
+### Modifié
+
+- Le job RPA Docker cible  dans le reseau Docker d'ingestion au lieu du Chrome du poste client.
+
 ## [0.6.0] - 2026-10-01
 
 ### Modifié

@@ -18,17 +18,17 @@ La web app écoute sur `http://localhost:5000` par défaut.
 Les images Docker sont taguées explicitement. Les valeurs par défaut sont :
 
 ```text
-rpa-streaming-web:0.6.0
-rpa-streaming-rpa:0.6.0
+rpa-streaming-web:0.7.0
+rpa-streaming-rpa:0.7.0
 ```
 
 Tu peux surcharger les noms ou tags via `.env` :
 
 ```env
 STREAMING_WEB_IMAGE=rpa-streaming-web
-STREAMING_WEB_TAG=0.6.0
+STREAMING_WEB_TAG=0.7.0
 STREAMING_RPA_IMAGE=rpa-streaming-rpa
-STREAMING_RPA_TAG=0.6.0
+STREAMING_RPA_TAG=0.7.0
 ```
 
 Pour reconstruire une version précise :
@@ -111,14 +111,20 @@ Le conteneur web embarque le client Docker et monte le socket Docker hôte :
 /var/run/docker.sock:/var/run/docker.sock
 ```
 
-Quand une ingestion est relancée depuis l'admin, le worker exécute :
+Quand une ingestion est relancée depuis l'admin, le worker exécute le compose
+d'ingestion embarqué dans l'image web :
 
 ```bash
-docker compose -f /app/docker-compose.rpa.yml run --rm rpa-job \
+docker compose -f /app/docker-compose.ingestion.yml run --rm rpa-job \
   python main_ingestion.py --platform <plateforme> \
-  --cdp-url http://host.docker.internal:9222 \
+  --cdp-url http://127.0.0.1:9222 \
   --skip-crunchyroll-api
 ```
+
+Ce compose lance aussi un service `rpa-chrome` dédié à l'ingestion. Chrome
+utilise un profil éphémère dans le conteneur et expose CDP dans le même
+namespace réseau que `rpa-job`; `127.0.0.1:9222` pointe donc vers le Chrome
+conteneurisé, pas vers le navigateur du poste client.
 
 Le job RPA partage le volume `streaming-web-data`, donc il écrit directement
 dans `/data/streaming.db`, la même base que celle lue par la web app.
@@ -131,10 +137,10 @@ runtime.
 Pour lancer un job RPA Docker à la main depuis WSL :
 
 ```bash
-docker compose --env-file .env -f docker-compose.rpa.yml build rpa-job
-docker compose --env-file .env -f docker-compose.rpa.yml run --rm rpa-job \
+docker compose --env-file .env -f docker-compose.ingestion.yml build rpa-job
+docker compose --env-file .env -f docker-compose.ingestion.yml run --rm rpa-job \
   python main_ingestion.py --platform netflix \
-  --cdp-url http://host.docker.internal:9222 \
+  --cdp-url http://127.0.0.1:9222 \
   --skip-crunchyroll-api
 ```
 
