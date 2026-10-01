@@ -2,6 +2,12 @@
 
 Tous les changements notables de ce projet sont documentés ici.
 
+## [0.7.1] - 2026-10-01
+
+### Corrigé
+
+- Les statuts mobiles d'ingestion conservent le message d'erreur quand un log admin contient plusieurs evenements sur une seule ligne.
+
 ## [0.7.0] - 2026-10-01
 
 ### Ajouté
