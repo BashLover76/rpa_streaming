@@ -45,6 +45,19 @@ dans `.env`). La confirmation exige de saisir `SUPPRIMER`; une copie SQLite horo
 créée dans `backups/` avant l'opération. Cette action ne modifie aucun compte
 de streaming et ne désabonne pas la série de BetaSeries.
 
+La page `/admin/profiles` centralise les réglages multi-profils :
+
+- création ou remplacement d'un méta-profil applicatif ;
+- association d'un nom de profil par plateforme ;
+- consultation de la matrice des profils plateforme exposée à l'application
+  mobile ;
+- réglage du seuil d'alerte de synchronisation mobile, avec `24` heures par
+  défaut.
+
+La page `/admin/rpa` présente uniquement les plateformes RPA activées. Les
+actions de relance sont affichées deux par ligne et les plateformes absentes ou
+désactivées dans la configuration ne sont pas proposées.
+
 Pour demander la suppression de l'historique sur les plateformes connectées,
 le script RPA fonctionne en aperçu par défaut. Il ouvre les pages configurées,
 repère les cartes dont le titre correspond exactement au titre fourni, et

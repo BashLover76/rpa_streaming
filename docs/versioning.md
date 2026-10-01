@@ -8,7 +8,7 @@ Le projet suit un versioning sémantique simple :
 - `MINOR` : nouvelle fonctionnalité compatible.
 - `PATCH` : correctif sans changement fonctionnel majeur.
 
-Version courante : `0.9.1`.
+Version courante : `1.0.0`.
 
 Les emplacements à mettre à jour ensemble sont :
 
@@ -16,6 +16,7 @@ Les emplacements à mettre à jour ensemble sont :
 - `android/app/src/main/java/fr/local/streamingdb/MainActivity.java` : `APP_VERSION`.
 - `docker-compose.web.yml` : tag par défaut de l'image web.
 - `docker-compose.rpa.yml` : tag par défaut de l'image RPA.
+- `docker-compose.ingestion.yml` : tag par défaut de l'image RPA d'ingestion.
 - `.env.example` : tags Docker documentés.
 - `CHANGELOG.md`.
 
@@ -38,7 +39,7 @@ feature/mobile-i18n
 feature/docker-versioning
 fix/mobile-resume-filter
 docs/security-versioning
-release/0.9.1
+release/1.0.0
 ```
 
 `main` ne reçoit pas de commits directs. Elle reçoit uniquement des merges

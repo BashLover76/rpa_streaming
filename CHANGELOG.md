@@ -2,6 +2,27 @@
 
 Tous les changements notables de ce projet sont documentés ici.
 
+## [1.0.0] - 2026-10-01
+
+### Ajouté
+
+- Page admin dédiée aux profils pour créer des méta-profils inter-plateformes.
+- API mobile enrichie avec méta-profils, paramètres mobiles et statuts
+  d'ingestion par plateforme même lorsqu'aucune date n'existe encore.
+- Configuration du seuil d'alerte de fraîcheur de synchro mobile, par défaut à
+  24 heures.
+- L'application Android affiche les méta-profils serveur, permet de régler
+  l'alerte synchro et présente les relances RPA deux plateformes par ligne.
+- Les relances RPA admin s'exécutent en différentiel sur tous les profils
+  applicatifs mappés.
+
+### Modifié
+
+- Les libellés de profils mobiles proviennent de la matrice serveur exposée par
+  `/api/mobile/bootstrap`.
+- Version Android alignée sur `1.0.0`.
+- Tags Docker par défaut alignés sur `1.0.0`.
+
 ## [0.9.1] - 2026-10-01
 
 ### Corrigé
