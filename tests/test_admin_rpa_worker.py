@@ -33,6 +33,7 @@ class AdminRpaWorkerTests(unittest.TestCase):
         self.assertIn("--rpa-mode", command)
         self.assertEqual(command[command.index("--rpa-mode") + 1], "differential")
         self.assertIn("--no-auto-start-chrome", command)
+        self.assertNotIn("--env-file", command)
 
 
 if __name__ == "__main__":

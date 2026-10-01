@@ -2,6 +2,18 @@
 
 Tous les changements notables de ce projet sont documentés ici.
 
+## [0.5.1] - 2026-10-01
+
+### Corrigé
+
+- Les relances RPA Docker depuis l'administration web ne dépendent plus d'un fichier  absent dans le conteneur web.
+- Le compose RPA lit les fichiers de configuration locaux depuis le volume Docker partagé.
+
+### Ajouté
+
+- L'API mobile expose les derniers statuts d'ingestion par plateforme.
+- L'écran Admin Android affiche les derniers statuts d'ingestion avec OK/KO, nombre d'items ajoutés et erreur éventuelle.
+
 ## [0.5.0] - 2026-09-27
 
 ### Ajouté
