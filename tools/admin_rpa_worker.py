@@ -85,6 +85,7 @@ def build_rpa_command(platform: str) -> list[str]:
             os.getenv("ADMIN_RPA_CDP_URL", "http://127.0.0.1:9222"),
             "--rpa-mode",
             "differential",
+            "--all-profiles",
             "--skip-crunchyroll-api",
             "--no-auto-start-chrome",
         ]
@@ -104,6 +105,7 @@ def build_rpa_command(platform: str) -> list[str]:
         os.getenv("RPA_CDP_URL", "http://127.0.0.1:9222"),
         "--rpa-mode",
         "differential",
+        "--all-profiles",
         "--skip-crunchyroll-api",
         "--no-auto-start-chrome",
     ]

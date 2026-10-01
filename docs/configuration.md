@@ -120,6 +120,22 @@ nominatif en dur.
 }
 ```
 
+## Méta-profils et profils plateforme
+
+L'administration web expose `/admin/profiles` pour relier plusieurs profils de
+plateformes sous un même méta-profil applicatif. Ces méta-profils sont stockés
+dans `.continue/meta_profiles.json` et exposés à l'application mobile via
+`/api/mobile/bootstrap`.
+
+La page permet aussi de régler le seuil d'alerte de synchronisation mobile
+(`sync_alert_hours`). La valeur par défaut est `24` heures et elle est stockée
+dans `.continue/mobile_settings.json`.
+
+Les profils plateforme continuent d'être alimentés depuis la configuration
+serveur, mais le contrat API est prévu pour accepter des profils découverts par
+l'ingestion lorsque les connecteurs RPA savent les lister. En cas d'absence de
+découverte, le fallback reste la matrice déclarée dans `.env`/JSON.
+
 - `default_profile_key` : profil appliqué automatiquement au démarrage.
 - `label` : texte affiché dans les sélecteurs web/mobile.
 - `technical_id` : valeur libre pour faire le lien avec une plateforme

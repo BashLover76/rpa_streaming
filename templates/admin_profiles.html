@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Admin - profils{% endblock %}
+{% block content %}
+<section class="admin-heading">
+  <div><p class="eyebrow">Administration locale</p><h1>Profils</h1></div>
+  <p class="muted">Matrice serveur, méta-profils et réglages mobile.</p>
+</section>
+<nav class="admin-tabs">
+  <a href="{{ url_for('admin_delete_view') }}">Suppressions</a>
+  <a href="{{ url_for('admin_rpa_view') }}">Relance RPA</a>
+  <a href="{{ url_for('admin_logs_view') }}">Logs</a>
+  <a href="{{ url_for('admin_kpis_view') }}">KPIs</a>
+  <a aria-current="page" href="{{ url_for('admin_profiles_view') }}">Profils</a>
+</nav>
+
+{% if request.args.get('saved') %}<p class="notice">Configuration enregistrée.</p>{% endif %}
+
+<section class="admin-section">
+  <h2>Profils applicatifs</h2>
+  <div class="admin-list">
+  {% for profile in profiles %}
+    <article class="admin-row">
+      <div>
+        <strong>{{ profile.label }}</strong>
+        <span>{{ profile.key }} · {{ profile.technical_id }}</span>
+      </div>
+      <div class="row-meta">{{ "junior" if profile.is_junior else "standard" }}</div>
+    </article>
+  {% endfor %}
+  </div>
+</section>
+
+<section class="admin-section">
+  <h2>Nouveau méta-profil</h2>
+  <form class="admin-profile-form" method="post" action="{{ url_for('admin_create_meta_profile') }}">
+    <label>Nom affiché <input name="label" required placeholder="Famille, Perso, Enfants"></label>
+    <label>Clé technique <input name="key" placeholder="famille"></label>
+    <div class="profile-platform-grid">
+    {% for item in platforms %}
+      <label><b class="platform-mark platform-{{ item.platform }}">{{ item.label }}</b><input name="platform_{{ item.platform }}" placeholder="Nom du profil sur {{ item.label }}"></label>
+    {% endfor %}
+    </div>
+    <button type="submit">Créer / remplacer</button>
+  </form>
+</section>
+
+<section class="admin-section">
+  <h2>Méta-profils existants</h2>
+  <div class="admin-list">
+  {% for profile in meta_profiles %}
+    <article class="admin-row">
+      <div>
+        <strong>{{ profile.label }}</strong>
+        <span>{{ profile.key }}</span>
+      </div>
+      <div class="row-meta">{{ profile.platforms|length }} plateformes</div>
+    </article>
+  {% else %}
+    <p class="empty">Aucun méta-profil créé.</p>
+  {% endfor %}
+  </div>
+</section>
+
+<section class="admin-section">
+  <h2>Alerte mobile</h2>
+  <form class="admin-profile-form" method="post" action="{{ url_for('admin_update_mobile_settings') }}">
+    <label>Notifier si la dernière synchro mobile dépasse X heures
+      <input type="number" min="1" max="720" name="sync_alert_hours" value="{{ mobile_settings.sync_alert_hours }}">
+    </label>
+    <button type="submit">Enregistrer</button>
+  </form>
+</section>
+{% endblock %}
