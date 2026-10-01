@@ -2,6 +2,12 @@
 
 Tous les changements notables de ce projet sont documentés ici.
 
+## [0.8.1] - 2026-10-01
+
+### Corrigé
+
+- L'import du `storage_state` filtre les champs de cookies propres à Chrome (`partitionKey`, `_crHasCrossSiteAncestor`) avant injection dans Playwright/CDP.
+
 ## [0.8.0] - 2026-10-01
 
 ### Ajouté
