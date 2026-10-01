@@ -11,6 +11,7 @@ from ingestion.rpa_self_healing import (
     _cdp_playwright_headers,
     _cdp_request_headers,
     _looks_like_selector,
+    _sanitize_storage_state_cookies,
 )
 
 
@@ -103,6 +104,29 @@ class CDPPreflightTest(unittest.TestCase):
             )
 
         self.assertIn("authentication UI", str(raised.exception))
+
+    def test_storage_state_cookie_sanitizer_removes_chrome_only_fields(self) -> None:
+        cookies = _sanitize_storage_state_cookies(
+            [
+                {
+                    "name": "session",
+                    "value": "redacted",
+                    "domain": ".example.test",
+                    "path": "/",
+                    "expires": "123",
+                    "httpOnly": True,
+                    "secure": True,
+                    "sameSite": "Lax",
+                    "partitionKey": "https://example.test",
+                    "_crHasCrossSiteAncestor": False,
+                }
+            ]
+        )
+
+        self.assertEqual(len(cookies), 1)
+        self.assertNotIn("partitionKey", cookies[0])
+        self.assertNotIn("_crHasCrossSiteAncestor", cookies[0])
+        self.assertEqual(cookies[0]["expires"], 123.0)
 
 
 if __name__ == "__main__":
