@@ -19,7 +19,7 @@ services:
       - ingestion
 
   rpa-job:
-    image: ${STREAMING_RPA_IMAGE:-rpa-streaming-rpa}:${STREAMING_RPA_TAG:-0.8.1}
+    image: ${STREAMING_RPA_IMAGE:-rpa-streaming-rpa}:${STREAMING_RPA_TAG:-0.9.0}
     build:
       context: .
       dockerfile: Dockerfile.rpa

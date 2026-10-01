@@ -598,17 +598,57 @@ class StreamingDB:
                 ),
             ).fetchone()
             if existing:
-                conn.execute(
-                    """UPDATE history SET saison=COALESCE(saison, ?), episode=COALESCE(episode, ?),
-                       raw_title=COALESCE(?, raw_title), confidence=COALESCE(?, confidence),
-                       episode_title=COALESCE(?, episode_title), episode_url=COALESCE(?, episode_url),
-                       progress_percent=COALESCE(?, progress_percent), status=COALESCE(?, status),
-                       profile_key=COALESCE(profile_key, ?),
-                       suitable_for_junior=MAX(COALESCE(suitable_for_junior, 0), ?)
-                       WHERE id=?""",
+                try:
+                    conn.execute(
+                        """UPDATE history SET saison=COALESCE(saison, ?), episode=COALESCE(episode, ?),
+                           raw_title=COALESCE(?, raw_title), confidence=COALESCE(?, confidence),
+                           episode_title=COALESCE(?, episode_title), episode_url=COALESCE(?, episode_url),
+                           progress_percent=COALESCE(?, progress_percent), status=COALESCE(?, status),
+                           profile_key=COALESCE(profile_key, ?),
+                           suitable_for_junior=MAX(COALESCE(suitable_for_junior, 0), ?)
+                           WHERE id=?""",
+                        (
+                            item.get("season"),
+                            item.get("episode"),
+                            item.get("raw_title"),
+                            item.get("confidence"),
+                            item.get("episode_title"),
+                            item.get("episode_url"),
+                            item.get("progress_percent"),
+                            item.get("status"),
+                            profile_key,
+                            suitable_for_junior,
+                            existing["id"],
+                        ),
+                    )
+                except sqlite3.IntegrityError:
+                    return False
+                return False
+            try:
+                cursor = conn.execute(
+                    """
+                    INSERT INTO history (
+                        serie_id, saison, episode, date_vu, plateforme_source,
+                        raw_title, confidence, episode_title, episode_url, progress_percent,
+                        status, profile_key, suitable_for_junior
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(serie_id, saison, episode, date_vu, plateforme_source) DO UPDATE SET
+                        raw_title = COALESCE(excluded.raw_title, history.raw_title),
+                        confidence = COALESCE(excluded.confidence, history.confidence),
+                        episode_title = COALESCE(excluded.episode_title, history.episode_title),
+                        episode_url = COALESCE(excluded.episode_url, history.episode_url),
+                        progress_percent = COALESCE(excluded.progress_percent, history.progress_percent),
+                        status = COALESCE(excluded.status, history.status),
+                        profile_key = COALESCE(history.profile_key, excluded.profile_key),
+                        suitable_for_junior = MAX(COALESCE(history.suitable_for_junior, 0), excluded.suitable_for_junior)
+                    """,
                     (
+                        serie_id,
                         item.get("season"),
                         item.get("episode"),
+                        item.get("watched_at"),
+                        item["platform"],
                         item.get("raw_title"),
                         item.get("confidence"),
                         item.get("episode_title"),
@@ -617,44 +657,10 @@ class StreamingDB:
                         item.get("status"),
                         profile_key,
                         suitable_for_junior,
-                        existing["id"],
                     ),
                 )
+            except sqlite3.IntegrityError:
                 return False
-            cursor = conn.execute(
-                """
-                INSERT INTO history (
-                    serie_id, saison, episode, date_vu, plateforme_source,
-                    raw_title, confidence, episode_title, episode_url, progress_percent,
-                    status, profile_key, suitable_for_junior
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(serie_id, saison, episode, date_vu, plateforme_source) DO UPDATE SET
-                    raw_title = COALESCE(excluded.raw_title, history.raw_title),
-                    confidence = COALESCE(excluded.confidence, history.confidence),
-                    episode_title = COALESCE(excluded.episode_title, history.episode_title),
-                    episode_url = COALESCE(excluded.episode_url, history.episode_url),
-                    progress_percent = COALESCE(excluded.progress_percent, history.progress_percent),
-                    status = COALESCE(excluded.status, history.status),
-                    profile_key = COALESCE(history.profile_key, excluded.profile_key),
-                    suitable_for_junior = MAX(COALESCE(history.suitable_for_junior, 0), excluded.suitable_for_junior)
-                """,
-                (
-                    serie_id,
-                    item.get("season"),
-                    item.get("episode"),
-                    item.get("watched_at"),
-                    item["platform"],
-                    item.get("raw_title"),
-                    item.get("confidence"),
-                    item.get("episode_title"),
-                    item.get("episode_url"),
-                    item.get("progress_percent"),
-                    item.get("status"),
-                    profile_key,
-                    suitable_for_junior,
-                ),
-            )
             return cursor.rowcount > 0
 
     def _with_default_profile(self, item: dict[str, Any]) -> dict[str, Any]:
