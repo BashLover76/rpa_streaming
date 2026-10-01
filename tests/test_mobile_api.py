@@ -131,6 +131,8 @@ class MobileApiTests(unittest.TestCase):
             payload["platform_profiles"]["crunchyroll"][0]["platform_profile_name"],
             "Profil principal",
         )
+        self.assertIn("ingestion_statuses", payload)
+        self.assertIsInstance(payload["ingestion_statuses"], list)
 
 
 if __name__ == "__main__":

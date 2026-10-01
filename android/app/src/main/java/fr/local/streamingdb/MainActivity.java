@@ -55,7 +55,7 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private static final int DEFAULT_PAGE_SIZE = 10;
-    private static final String APP_VERSION = "0.5.0";
+    private static final String APP_VERSION = "0.5.1";
 
     private final ExecutorService executor = Executors.newFixedThreadPool(3);
     private final List<Screen> backStack = new ArrayList<>();
@@ -529,6 +529,7 @@ public class MainActivity extends Activity {
         addPlatformProfileSettings();
         addAdminSettings();
         addAdminKpis();
+        addIngestionStatuses();
         addDebugLog();
         addMessage(tr("app_version") + ": " + APP_VERSION);
         addMessage(tr("rpa_web_only"));
@@ -679,6 +680,32 @@ public class MainActivity extends Activity {
         }
         for (java.util.Map.Entry<String, Integer> entry : counts.entrySet()) {
             card.addView(line(platformLabel(entry.getKey()) + " · " + entry.getValue()));
+        }
+        content.addView(card);
+    }
+
+    private void addIngestionStatuses() {
+        addSection(tr("last_ingestions"));
+        LinearLayout card = card();
+        JSONObject bootstrap = cachedJson("bootstrap");
+        JSONArray statuses = bootstrap == null ? null : bootstrap.optJSONArray("ingestion_statuses");
+        if (statuses == null || statuses.length() == 0) {
+            card.addView(line(tr("no_synced_data")));
+            content.addView(card);
+            return;
+        }
+        for (int index = 0; index < statuses.length(); index++) {
+            JSONObject status = statuses.optJSONObject(index);
+            if (status == null) continue;
+            boolean ok = "ok".equalsIgnoreCase(status.optString("status"));
+            String text = (ok ? "OK " : "KO ")
+                    + status.optString("platform_label", status.optString("platform"))
+                    + " - +" + status.optInt("inserted", 0);
+            String error = status.optString("error", "");
+            if (!ok && !error.isEmpty()) text += " - " + error;
+            TextView row = line(text);
+            row.setTextColor(ok ? Color.rgb(73, 190, 137) : Color.rgb(236, 95, 103));
+            card.addView(row);
         }
         content.addView(card);
     }
@@ -1038,6 +1065,7 @@ public class MainActivity extends Activity {
             case "display_help": return "Grille: colonnes 1 à 4. Pagination: nombre de lignes max par page.";
             case "display_saved": return "Affichage enregistré";
             case "language": return "Langue";
+            case "last_ingestions": return "Dernières ingestions";
             case "last_sync": return "Dernière synchro";
             case "last_seen": return "Derniers vus";
             case "load_profiles": return "Charger les profils";
@@ -1099,6 +1127,7 @@ public class MainActivity extends Activity {
             case "display_help": return "Grid: 1 to 4 columns. Pagination: maximum rows per page.";
             case "display_saved": return "Display saved";
             case "language": return "Language";
+            case "last_ingestions": return "Latest ingestions";
             case "last_sync": return "Last sync";
             case "last_seen": return "Last watched";
             case "load_profiles": return "Load profiles";
@@ -1160,6 +1189,7 @@ public class MainActivity extends Activity {
             case "display_help": return "Cuadrícula: 1 a 4 columnas. Paginación: filas máximas por página.";
             case "display_saved": return "Visualización guardada";
             case "language": return "Idioma";
+            case "last_ingestions": return "Últimas ingestas";
             case "last_sync": return "Última synchro";
             case "last_seen": return "Últimos vistos";
             case "load_profiles": return "Cargar perfiles";
