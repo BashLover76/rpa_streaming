@@ -2,6 +2,18 @@
 
 Tous les changements notables de ce projet sont documentés ici.
 
+## [0.9.0] - 2026-10-01
+
+### Ajouté
+
+- L'API mobile expose les plateformes RPA configurées et permet de mettre une relance RPA en file.
+- L'écran Admin Android affiche les badges des plateformes RPA configurées et permet de relancer une ingestion.
+
+### Corrigé
+
+- Les plateformes désactivées ne sont plus proposées dans la relance RPA web/mobile.
+- L'insertion d'historique ignore proprement les enrichissements qui retombent sur une ligne déjà existante.
+
 ## [0.8.1] - 2026-10-01
 
 ### Corrigé

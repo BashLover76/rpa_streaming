@@ -60,6 +60,11 @@ class MobileApiTests(unittest.TestCase):
         app.config["STREAMING_PLATFORM_PROFILES"] = {
             "crunchyroll": {"default": "Profil principal", "junior": "Kids"}
         }
+        app.config["STREAMING_PLATFORMS"] = {
+            "crunchyroll": True,
+            "netflix": True,
+            "paramount_plus": False,
+        }
         self.client = app.test_client()
 
     def test_mobile_titles_expose_deep_links(self):
@@ -133,6 +138,24 @@ class MobileApiTests(unittest.TestCase):
         )
         self.assertIn("ingestion_statuses", payload)
         self.assertIsInstance(payload["ingestion_statuses"], list)
+        platforms = {item["platform"] for item in payload["rpa_platforms"]}
+        self.assertIn("crunchyroll", platforms)
+        self.assertIn("netflix", platforms)
+        self.assertNotIn("paramount_plus", platforms)
+
+    def test_mobile_rpa_run_queues_configured_platform(self):
+        with unittest.mock.patch("web_app.enqueue_rpa_platform") as enqueue:
+            enqueue.return_value = {"log_path": "logs/admin-rpa-crunchyroll.log"}
+            response = self.client.post("/api/mobile/rpa/crunchyroll/run")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["status"], "queued")
+        enqueue.assert_called_once_with("crunchyroll")
+
+    def test_mobile_rpa_run_rejects_unconfigured_platform(self):
+        response = self.client.post("/api/mobile/rpa/paramount_plus/run")
+
+        self.assertEqual(response.status_code, 404)
 
 
 if __name__ == "__main__":

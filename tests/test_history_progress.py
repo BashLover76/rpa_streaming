@@ -42,6 +42,33 @@ class HistoryProgressTests(unittest.TestCase):
                 conn.execute("SELECT COUNT(*) FROM series").fetchone()[0], 1
             )
 
+    def test_history_update_conflict_is_idempotent(self):
+        base_item = {
+            "serie_title": "Conflict title",
+            "platform": "crunchyroll",
+            "season": None,
+            "episode": None,
+            "watched_at": "2026-10-01",
+            "episode_url": "https://example.com/watch/ABC",
+        }
+        self.db.insert_history_item(base_item)
+        self.db.insert_history_item(
+            {
+                **base_item,
+                "season": 1,
+                "episode": 1,
+                "episode_url": None,
+            }
+        )
+
+        self.assertFalse(
+            self.db.insert_history_item({**base_item, "season": 1, "episode": 1})
+        )
+        with self.db.connect() as conn:
+            self.assertEqual(
+                conn.execute("SELECT COUNT(*) FROM history").fetchone()[0], 2
+            )
+
     def test_detail_counts_unique_episodes_over_total_not_events_or_limit(self):
         series_id = self.db.upsert_series(
             title="A", platform="crunchyroll", episodes_count=24

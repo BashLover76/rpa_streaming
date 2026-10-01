@@ -2,9 +2,9 @@
 
 Le dossier `android/` contient l'application Android native `StreamPilot`.
 Elle consomme l'API web du serveur local, fonctionne offline après synchronisation
-et ne lance pas le RPA.
+et peut demander une relance RPA au serveur local.
 
-Version actuelle : `0.5.1`. Le numéro de version est visible dans l'écran
+Version actuelle : `0.6.0`. Le numéro de version est visible dans l'écran
 `Admin` de l'application.
 
 ## Synchronisation avec le serveur local
@@ -77,6 +77,9 @@ Fonctionnalités mobiles :
 - écran `Admin` pour configurer l'URL du serveur local, lancer la synchro,
   régler la grille/pagination, voir les KPIs offline et lire le log de debug
   de synchronisation.
+- relance RPA depuis `Admin` via les badges des plateformes configurées côté
+  serveur. Les plateformes désactivées ou absentes de la configuration ne sont
+  pas affichées.
 - écran `Admin > Profils streaming` listant, par plateforme, le profil du
   service utilisé pour chaque profil applicatif.
 - sélecteur de langue par drapeaux : français, anglais et espagnol.
@@ -128,6 +131,7 @@ android/app/build/outputs/apk/debug/app-debug.apk
 ## Limites
 
 - L'application mobile lit uniquement les données synchronisées sur le serveur local.
-- Les opérations admin et RPA ne sont pas exposées dans l'application.
+- La relance RPA mobile met un job en file côté serveur ; l'exécution reste
+  réalisée par le serveur web/Docker.
 - Les images sont mises en cache dans le stockage privé de l'application après
   synchronisation ou première consultation.
