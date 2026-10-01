@@ -493,6 +493,20 @@ docker compose --env-file .env -f docker-compose.ingestion.yml run --rm rpa-job 
 
 Tu y trouveras les captures PNG et les DOM HTML utilisés par le self-healing.
 
+Si une plateforme refuse la connexion dans le Chrome Docker headless, relance
+avec le Chrome Windows déjà authentifié. Démarre Chrome Windows avec CDP, puis
+utilise `docker-compose.rpa.yml` :
+
+```bash
+docker compose --env-file .env -f docker-compose.rpa.yml run --rm rpa-job \
+  python main_ingestion.py \
+  --platform netflix \
+  --cdp-url http://127.0.0.1:9222 \
+  --rpa-mode differential \
+  --skip-crunchyroll-api \
+  --no-auto-start-chrome
+```
+
 ## Verification rapide
 
 ```bash
