@@ -1,0 +1,64 @@
+services:
+  rpa-chrome:
+    image: ${STREAMING_CHROME_IMAGE:-zenika/alpine-chrome}:${STREAMING_CHROME_TAG:-latest}
+    user: root
+    command:
+      - chromium-browser
+      - --headless=new
+      - --no-sandbox
+      - --disable-dev-shm-usage
+      - --disable-gpu
+      - --remote-debugging-address=0.0.0.0
+      - --remote-debugging-port=9222
+      - --remote-allow-origins=*
+      - --user-data-dir=/tmp/chrome
+    shm_size: "1gb"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - ingestion
+
+  rpa-job:
+    image: ${STREAMING_RPA_IMAGE:-rpa-streaming-rpa}:${STREAMING_RPA_TAG:-0.7.0}
+    build:
+      context: .
+      dockerfile: Dockerfile.rpa
+    depends_on:
+      - rpa-chrome
+    network_mode: "service:rpa-chrome"
+    environment:
+      STREAMING_DB_PATH: /data/streaming.db
+      BETASERIES_CONFIG_FILE: ${BETASERIES_CONFIG_FILE:-config/betaseries.local.json}
+      OLLAMA_CONFIG_FILE: ${OLLAMA_CONFIG_FILE:-config/ollama.local.json}
+      CRUNCHYROLL_CONFIG_FILE: ${CRUNCHYROLL_CONFIG_FILE:-config/crunchyroll.local.json}
+      STREAMING_PROFILES_FILE: ${STREAMING_PROFILES_FILE:-config/streaming_profiles.local.json}
+      STREAMING_PLATFORMS_FILE: ${STREAMING_PLATFORMS_FILE:-config/streaming_platforms.local.json}
+      STREAMING_PLATFORM_CONFIG_FILE: ${STREAMING_PLATFORM_CONFIG_FILE:-config/streaming_platform_config.local.json}
+      RPA_CDP_URL: http://127.0.0.1:9222
+      RPA_CDP_PROXY: "0"
+      RPA_OLLAMA_PROXY: ${RPA_OLLAMA_PROXY:-1}
+      RPA_OLLAMA_PROXY_PORT: ${RPA_OLLAMA_PROXY_PORT:-11434}
+      RPA_OLLAMA_PROXY_TARGET: ${RPA_OLLAMA_PROXY_TARGET:-host.docker.internal:11434}
+      PLATFORM_CONFIG_PATH: ${PLATFORM_CONFIG_PATH:-}
+    volumes:
+      - streaming-web-data:/data
+      - streaming-web-config:/app/config:ro
+      - rpa-state:/app/.continue
+      - rpa-logs:/app/logs
+      - rpa-artifacts:/app/artifacts
+      - rpa-backups:/app/backups
+
+networks:
+  ingestion:
+
+volumes:
+  streaming-web-data:
+    external: true
+    name: rpa_streaming_streaming-web-data
+  streaming-web-config:
+    external: true
+    name: rpa_streaming_streaming-web-config
+  rpa-state:
+  rpa-logs:
+  rpa-artifacts:
+  rpa-backups:
