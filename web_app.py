@@ -1174,22 +1174,23 @@ def fetch_mobile_ingestion_statuses() -> list[dict[str, Any]]:
                 "raw": catalog.group(1),
                 "updated_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
             }
+    current_admin_platform: str | None = None
     for timestamp, line in iter_admin_rpa_log_lines():
         started = re.search(r"queued job started: ([a-z0-9_]+)", line)
         if started:
-            platform = started.group(1)
-            statuses.setdefault(
-                platform,
-                {
+            current_admin_platform = started.group(1)
+        if "ERROR" in line or "env file" in line or "Traceback" in line:
+            platform = _platform_from_admin_log_line(line) or current_admin_platform
+            if platform:
+                current = statuses.get(platform, {})
+                statuses[platform] = {
                     "platform": platform,
                     "platform_label": PLATFORM_LABELS.get(platform, platform),
-                    "status": "ok",
-                    "inserted": 0,
-                    "error": "",
+                    "status": "ko",
+                    "inserted": int(current.get("inserted", 0) or 0),
+                    "error": _admin_log_error_message(line),
                     "updated_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                },
-            )
-            continue
+                }
         finished = re.search(r"queued job finished: ([a-z0-9_]+) rc=(\d+)", line)
         if finished:
             platform = finished.group(1)
@@ -1205,18 +1206,19 @@ def fetch_mobile_ingestion_statuses() -> list[dict[str, Any]]:
                 "updated_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
             }
             continue
-        if "ERROR" in line or "env file" in line or "Traceback" in line:
-            platform = _platform_from_admin_log_line(line)
-            if platform:
-                current = statuses.get(platform, {})
-                statuses[platform] = {
+        if started:
+            platform = started.group(1)
+            statuses.setdefault(
+                platform,
+                {
                     "platform": platform,
                     "platform_label": PLATFORM_LABELS.get(platform, platform),
-                    "status": "ko",
-                    "inserted": int(current.get("inserted", 0) or 0),
-                    "error": line.split("|")[-1].strip(),
+                    "status": "ok",
+                    "inserted": 0,
+                    "error": "",
                     "updated_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                }
+                },
+            )
     items = sorted(statuses.values(), key=lambda item: item["platform_label"])
     if catalog_summary is not None:
         has_errors = (
@@ -1242,6 +1244,13 @@ def _platform_from_admin_log_line(line: str) -> str | None:
         if platform in line:
             return platform
     return None
+
+
+def _admin_log_error_message(line: str) -> str:
+    env_error = re.search(r"(env file .*?)(?: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}|$)", line)
+    if env_error:
+        return env_error.group(1).strip()
+    return line.split("|")[-1].strip()
 
 
 def tail_file(path: Path, *, lines: int) -> str:
@@ -1451,10 +1460,14 @@ def iter_admin_rpa_log_lines() -> list[tuple[datetime, str]]:
             lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError:
             continue
+        current_timestamp: datetime | None = None
         for line in lines:
             timestamp = parse_admin_log_timestamp(line)
             if timestamp:
+                current_timestamp = timestamp
                 items.append((timestamp, line))
+            elif current_timestamp:
+                items.append((current_timestamp, line))
     return sorted(items, key=lambda item: item[0])
 
 
