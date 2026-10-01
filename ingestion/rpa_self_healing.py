@@ -227,12 +227,14 @@ class SelfHealingRPA:
         try:
             state = json.loads(self.storage_state_path.read_text(encoding="utf-8"))
             cookies = state.get("cookies") if isinstance(state, dict) else None
-            if isinstance(cookies, list) and cookies:
-                context.add_cookies(cookies)
+            safe_cookies = _sanitize_storage_state_cookies(cookies)
+            if safe_cookies:
+                context.add_cookies(safe_cookies)
             self._import_storage_origins(context, state)
             LOGGER.info(
-                "RPA storage state imported: %s cookies from %s",
-                len(cookies or []),
+                "RPA storage state imported: %s/%s cookies from %s",
+                len(safe_cookies),
+                len(cookies or []) if isinstance(cookies, list) else 0,
                 self.storage_state_path,
             )
         except Exception:
@@ -1645,3 +1647,43 @@ def _looks_like_selector(selector: str) -> bool:
         return False
     selector_markers = ("[", ".", "#", ":", ">", "*", "=", "/", "text=", "role=")
     return any(marker in normalized for marker in selector_markers)
+
+
+def _sanitize_storage_state_cookies(raw_cookies: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw_cookies, list):
+        return []
+
+    allowed_keys = {
+        "name",
+        "value",
+        "url",
+        "domain",
+        "path",
+        "expires",
+        "httpOnly",
+        "secure",
+        "sameSite",
+    }
+    allowed_same_site = {"Strict", "Lax", "None"}
+    safe_cookies: list[dict[str, Any]] = []
+    for raw_cookie in raw_cookies:
+        if not isinstance(raw_cookie, dict):
+            continue
+        cookie = {
+            key: value
+            for key, value in raw_cookie.items()
+            if key in allowed_keys and value is not None
+        }
+        if not cookie.get("name") or "value" not in cookie:
+            continue
+        if not cookie.get("url") and not cookie.get("domain"):
+            continue
+        if "sameSite" in cookie and cookie["sameSite"] not in allowed_same_site:
+            cookie.pop("sameSite", None)
+        if "expires" in cookie:
+            try:
+                cookie["expires"] = float(cookie["expires"])
+            except (TypeError, ValueError):
+                cookie.pop("expires", None)
+        safe_cookies.append(cookie)
+    return safe_cookies
