@@ -18,17 +18,17 @@ La web app écoute sur `http://localhost:5000` par défaut.
 Les images Docker sont taguées explicitement. Les valeurs par défaut sont :
 
 ```text
-rpa-streaming-web:0.7.1
-rpa-streaming-rpa:0.7.1
+rpa-streaming-web:0.7.2
+rpa-streaming-rpa:0.7.2
 ```
 
 Tu peux surcharger les noms ou tags via `.env` :
 
 ```env
 STREAMING_WEB_IMAGE=rpa-streaming-web
-STREAMING_WEB_TAG=0.7.1
+STREAMING_WEB_TAG=0.7.2
 STREAMING_RPA_IMAGE=rpa-streaming-rpa
-STREAMING_RPA_TAG=0.7.1
+STREAMING_RPA_TAG=0.7.2
 ```
 
 Pour reconstruire une version précise :
@@ -147,6 +147,13 @@ docker compose --env-file .env -f docker-compose.ingestion.yml run --rm rpa-job 
 Le Chrome utilisé par cette commande est le service `rpa-chrome` du compose
 d'ingestion. Il n'est donc plus nécessaire que le navigateur du poste client ou
 du poste Windows appelant soit lancé avec CDP pour les relances Docker.
+
+Le profil Chrome Docker est volontairement éphémère. Si une plateforme reste
+sur un écran de connexion, MFA ou sélection de profil, le RPA refuse désormais
+les sélecteurs proposés par self-healing lorsqu'ils ciblent le formulaire de
+login. Le log admin affiche alors une erreur explicite : vérifie les identifiants
+et les profils dans `config/streaming_platform_config.local.json`, puis relance
+la plateforme.
 
 ### Rejouer une ingestion Docker
 

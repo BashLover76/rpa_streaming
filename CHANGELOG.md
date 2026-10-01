@@ -2,6 +2,14 @@
 
 Tous les changements notables de ce projet sont documentés ici.
 
+## [0.7.2] - 2026-10-01
+
+### Corrigé
+
+- Le RPA refuse désormais les sélecteurs self-healing qui pointent vers une interface de connexion au lieu d'un historique.
+- Après une connexion RPA, l'ingestion vérifie que la page d'historique est réellement atteinte avant d'extraire les cartes.
+- Les échecs d'authentification ou de sélection de profil produisent un message explicite dans les logs admin au lieu d'une ingestion vide ambiguë.
+
 ## [0.7.1] - 2026-10-01
 
 ### Corrigé
