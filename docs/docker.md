@@ -144,11 +144,65 @@ docker compose --env-file .env -f docker-compose.ingestion.yml run --rm rpa-job 
   --skip-crunchyroll-api
 ```
 
-Sous Docker/WSL, le job RPA joint Chrome via `host.docker.internal:9222`.
-Chrome doit donc être lancé avec `--remote-debugging-address=0.0.0.0`.
-L'image RPA démarre aussi des proxys locaux internes pour Chrome CDP et Ollama,
-afin que les URLs `127.0.0.1` renvoyées par Chrome restent utilisables depuis
-le conteneur.
+Le Chrome utilisé par cette commande est le service `rpa-chrome` du compose
+d'ingestion. Il n'est donc plus nécessaire que le navigateur du poste client ou
+du poste Windows appelant soit lancé avec CDP pour les relances Docker.
+
+### Rejouer une ingestion Docker
+
+Avant une relance, synchronise les fichiers de configuration locaux dans le
+volume Docker partagé :
+
+```bash
+python tools/sync_config_to_docker_volume.py
+```
+
+Relancer toutes les plateformes en différentiel :
+
+```bash
+docker compose --env-file .env -f docker-compose.ingestion.yml run --rm rpa-job \
+  python main_ingestion.py \
+  --cdp-url http://127.0.0.1:9222 \
+  --rpa-mode differential \
+  --skip-crunchyroll-api
+```
+
+Relancer une seule plateforme en différentiel :
+
+```bash
+docker compose --env-file .env -f docker-compose.ingestion.yml run --rm rpa-job \
+  python main_ingestion.py \
+  --platform crunchyroll \
+  --cdp-url http://127.0.0.1:9222 \
+  --rpa-mode differential \
+  --skip-crunchyroll-api
+```
+
+Relancer toutes les plateformes en full :
+
+```bash
+docker compose --env-file .env -f docker-compose.ingestion.yml run --rm rpa-job \
+  python main_ingestion.py \
+  --cdp-url http://127.0.0.1:9222 \
+  --rpa-mode full \
+  --skip-crunchyroll-api
+```
+
+Suivre les logs du job lancé depuis l'admin web :
+
+```bash
+docker compose --env-file .env -f docker-compose.web.yml exec -T streaming-web \
+  tail -f /app/logs/admin-rpa-<plateforme>-<timestamp>.log
+```
+
+Après une ingestion lancée hors conteneur web, resynchronise la base dans le
+volume web si nécessaire :
+
+```bash
+python tools/sync_db_to_web_container.py --restart
+```
+
+### Ancien mode Chrome hôte
 
 Chrome doit être lancé côté Windows/hôte avec CDP sur le port `9222`. Depuis
 PowerShell :

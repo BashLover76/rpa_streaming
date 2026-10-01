@@ -418,6 +418,79 @@ python main_ingestion.py \
   --rpa-mode differential
 ```
 
+## Rejouer une ingestion
+
+### Depuis l'environnement local WSL
+
+Relancer toutes les plateformes en différentiel avec le Chrome CDP local :
+
+```bash
+python main_ingestion.py \
+  --cdp-url http://127.0.0.1:9222 \
+  --rpa-mode differential
+```
+
+Relancer une seule plateforme :
+
+```bash
+python main_ingestion.py \
+  --platform crunchyroll \
+  --cdp-url http://127.0.0.1:9222 \
+  --rpa-mode differential \
+  --skip-crunchyroll-api
+```
+
+Relancer toutes les plateformes en full :
+
+```bash
+python main_ingestion.py \
+  --cdp-url http://127.0.0.1:9222 \
+  --rpa-mode full
+```
+
+### Depuis Docker avec Chrome conteneurisé
+
+Le compose `docker-compose.ingestion.yml` lance un Chrome dédié (`rpa-chrome`)
+et le job RPA dans le même environnement réseau. C'est le mode recommandé pour
+les relances depuis l'administration web ou depuis une autre machine du réseau.
+
+Synchronise d'abord la configuration locale dans le volume Docker :
+
+```bash
+python tools/sync_config_to_docker_volume.py
+```
+
+Relancer toutes les plateformes en différentiel :
+
+```bash
+docker compose --env-file .env -f docker-compose.ingestion.yml run --rm rpa-job \
+  python main_ingestion.py \
+  --cdp-url http://127.0.0.1:9222 \
+  --rpa-mode differential \
+  --skip-crunchyroll-api
+```
+
+Relancer une seule plateforme :
+
+```bash
+docker compose --env-file .env -f docker-compose.ingestion.yml run --rm rpa-job \
+  python main_ingestion.py \
+  --platform netflix \
+  --cdp-url http://127.0.0.1:9222 \
+  --rpa-mode differential \
+  --skip-crunchyroll-api
+```
+
+Relancer toutes les plateformes en full :
+
+```bash
+docker compose --env-file .env -f docker-compose.ingestion.yml run --rm rpa-job \
+  python main_ingestion.py \
+  --cdp-url http://127.0.0.1:9222 \
+  --rpa-mode full \
+  --skip-crunchyroll-api
+```
+
 Tu y trouveras les captures PNG et les DOM HTML utilisés par le self-healing.
 
 ## Verification rapide
