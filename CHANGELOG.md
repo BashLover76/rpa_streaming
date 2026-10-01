@@ -2,6 +2,13 @@
 
 Tous les changements notables de ce projet sont documentés ici.
 
+## [0.9.1] - 2026-10-01
+
+### Corrigé
+
+- Le RPA refuse désormais de self-healer une page de vérification anti-bot comme si c'était une page d'historique.
+- Les logs Crunchyroll indiquent explicitement de valider la session dans un Chrome interactif ou de passer par le compose CDP hôte lorsque le Chrome Docker affiche `Just a moment...`.
+
 ## [0.9.0] - 2026-10-01
 
 ### Ajouté
