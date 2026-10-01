@@ -438,6 +438,45 @@ def create_app() -> Flask:
             platform_labels=PLATFORM_LABELS,
         )
 
+    @app.get("/admin/profiles")
+    def admin_profiles_view():
+        return render_template(
+            "admin_profiles.html",
+            profiles=profile_options(),
+            platform_profiles=platform_profile_options(),
+            meta_profiles=read_meta_profiles(),
+            mobile_settings=read_mobile_settings(),
+            platforms=fetch_admin_platforms(),
+        )
+
+    @app.post("/admin/profiles/meta")
+    def admin_create_meta_profile():
+        label = request.form.get("label", "").strip()
+        profile_key = slugify(request.form.get("key", "") or label)
+        if not label or not profile_key:
+            abort(400, description="Profil invalide.")
+        mapping = {
+            key.removeprefix("platform_"): value.strip()
+            for key, value in request.form.items()
+            if key.startswith("platform_") and value.strip()
+        }
+        meta_profiles = read_meta_profiles()
+        meta_profiles = [
+            profile for profile in meta_profiles if profile.get("key") != profile_key
+        ]
+        meta_profiles.append({"key": profile_key, "label": label, "platforms": mapping})
+        write_json_file(META_PROFILES_PATH, meta_profiles)
+        return redirect(url_for("admin_profiles_view", saved="1"))
+
+    @app.post("/admin/profiles/mobile-settings")
+    def admin_update_mobile_settings():
+        settings = read_mobile_settings()
+        settings["sync_alert_hours"] = clamp_int(
+            request.form.get("sync_alert_hours"), default=24, minimum=1, maximum=720
+        )
+        write_json_file(MOBILE_SETTINGS_PATH, settings)
+        return redirect(url_for("admin_profiles_view", saved="1"))
+
     @app.post("/admin/series/<int:series_id>/delete")
     def admin_delete_series(series_id: int):
         if request.form.get("confirmation") != "SUPPRIMER":
@@ -604,10 +643,35 @@ def create_app() -> Flask:
                 "profiles": profile_options(),
                 "default_profile_key": current_app.config["DEFAULT_PROFILE_KEY"],
                 "platform_profiles": platform_profile_options(),
+                "meta_profiles": read_meta_profiles(),
+                "mobile_settings": read_mobile_settings(),
                 "rpa_platforms": fetch_admin_platforms(),
                 "ingestion_statuses": fetch_mobile_ingestion_statuses(),
             }
         )
+
+    @app.get("/api/mobile/settings")
+    def api_mobile_settings():
+        return jsonify(
+            {
+                "meta_profiles": read_meta_profiles(),
+                "mobile_settings": read_mobile_settings(),
+                "platform_profiles": platform_profile_options(),
+            }
+        )
+
+    @app.post("/api/mobile/settings")
+    def api_mobile_update_settings():
+        payload = request.get_json(silent=True) or {}
+        settings = read_mobile_settings()
+        settings["sync_alert_hours"] = clamp_int(
+            payload.get("sync_alert_hours"),
+            settings["sync_alert_hours"],
+            1,
+            720,
+        )
+        write_json_file(MOBILE_SETTINGS_PATH, settings)
+        return jsonify({"mobile_settings": settings})
 
     @app.get("/api/mobile/rpa/platforms")
     def api_mobile_rpa_platforms():
@@ -808,6 +872,60 @@ def platform_profile_options() -> dict[str, list[dict[str, Any]]]:
             )
         result[platform] = items
     return result
+
+
+def read_meta_profiles() -> list[dict[str, Any]]:
+    value = read_json_file(META_PROFILES_PATH, [])
+    if not isinstance(value, list):
+        return []
+    profiles = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        platforms = item.get("platforms")
+        if platforms is None:
+            platforms = item.get("platform_profiles", {})
+        profiles.append(
+            {
+                "key": str(item.get("key", "")),
+                "label": str(item.get("label", item.get("key", ""))),
+                "platforms": platforms if isinstance(platforms, dict) else {},
+            }
+        )
+    return profiles
+
+
+def read_mobile_settings() -> dict[str, Any]:
+    value = read_json_file(MOBILE_SETTINGS_PATH, {})
+    settings = value if isinstance(value, dict) else {}
+    return {"sync_alert_hours": clamp_int(settings.get("sync_alert_hours"), 24, 1, 720)}
+
+
+def read_json_file(path: Path, default: Any) -> Any:
+    if not path.exists():
+        return default
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return default
+
+
+def write_json_file(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def slugify(value: str) -> str:
+    cleaned = re.sub(r"[^a-z0-9_]+", "_", value.strip().casefold())
+    return re.sub(r"_+", "_", cleaned).strip("_")
+
+
+def clamp_int(value: Any, default: int, minimum: int, maximum: int) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        number = default
+    return max(minimum, min(maximum, number))
 
 
 def resolve_profile() -> dict[str, Any]:
@@ -1074,6 +1192,8 @@ STATE_DIR = Path(".continue")
 ADMIN_RPA_QUEUE = STATE_DIR / "admin_rpa_queue.json"
 ADMIN_RPA_QUEUE_LOCK = STATE_DIR / "admin_rpa_queue.lock"
 ADMIN_RPA_STATUS = STATE_DIR / "admin_rpa_status.json"
+META_PROFILES_PATH = STATE_DIR / "meta_profiles.json"
+MOBILE_SETTINGS_PATH = STATE_DIR / "mobile_settings.json"
 
 
 def enqueue_rpa_platform(platform: str) -> dict[str, Any]:
@@ -1242,6 +1362,19 @@ def fetch_mobile_ingestion_statuses() -> list[dict[str, Any]]:
                     "updated_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
                 },
             )
+    for item in fetch_admin_platforms():
+        platform = item["platform"]
+        statuses.setdefault(
+            platform,
+            {
+                "platform": platform,
+                "platform_label": item.get("label") or PLATFORM_LABELS.get(platform, platform),
+                "status": "unknown",
+                "inserted": 0,
+                "error": "",
+                "updated_at": "",
+            },
+        )
     items = sorted(statuses.values(), key=lambda item: item["platform_label"])
     if catalog_summary is not None:
         has_errors = (

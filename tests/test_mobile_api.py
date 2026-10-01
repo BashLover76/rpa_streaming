@@ -1,9 +1,11 @@
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from ingestion.db import StreamingDB
 from ingestion.settings import StreamingProfile
+import web_app
 from web_app import create_app
 
 
@@ -11,7 +13,10 @@ class MobileApiTests(unittest.TestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
-        self.db = StreamingDB(Path(folder.name) / "test.db")
+        state_dir = Path(folder.name)
+        web_app.META_PROFILES_PATH = state_dir / "meta_profiles.json"
+        web_app.MOBILE_SETTINGS_PATH = state_dir / "mobile_settings.json"
+        self.db = StreamingDB(state_dir / "test.db")
         self.db.init_schema()
         self.series_id = self.db.upsert_series(
             title="Mobile Series",
@@ -138,10 +143,25 @@ class MobileApiTests(unittest.TestCase):
         )
         self.assertIn("ingestion_statuses", payload)
         self.assertIsInstance(payload["ingestion_statuses"], list)
+        self.assertIn("meta_profiles", payload)
+        self.assertEqual(payload["mobile_settings"]["sync_alert_hours"], 24)
         platforms = {item["platform"] for item in payload["rpa_platforms"]}
         self.assertIn("crunchyroll", platforms)
         self.assertIn("netflix", platforms)
         self.assertNotIn("paramount_plus", platforms)
+
+    def test_mobile_settings_can_update_sync_alert_threshold(self):
+        response = self.client.post(
+            "/api/mobile/settings",
+            json={"sync_alert_hours": 48},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["mobile_settings"]["sync_alert_hours"], 48)
+        self.assertEqual(
+            self.client.get("/api/mobile/settings").get_json()["mobile_settings"]["sync_alert_hours"],
+            48,
+        )
 
     def test_mobile_rpa_run_queues_configured_platform(self):
         with unittest.mock.patch("web_app.enqueue_rpa_platform") as enqueue:

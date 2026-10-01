@@ -10,6 +10,7 @@
   <a aria-current="page" href="{{ url_for('admin_rpa_view') }}">Relance RPA</a>
   <a href="{{ url_for('admin_logs_view') }}">Logs</a>
   <a href="{{ url_for('admin_kpis_view') }}">KPIs</a>
+  <a href="{{ url_for('admin_profiles_view') }}">Profils</a>
 </nav>
 
 {% if request.args.get('rpa_started') %}<p class="notice">RPA {{ platform_labels.get(request.args.get('rpa_started'), request.args.get('rpa_started')) }} ajouté à la file. Log : {{ request.args.get('rpa_log') }}</p>{% endif %}

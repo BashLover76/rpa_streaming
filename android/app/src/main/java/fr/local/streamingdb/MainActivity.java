@@ -56,7 +56,7 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private static final int DEFAULT_PAGE_SIZE = 10;
-    private static final String APP_VERSION = "0.6.0";
+    private static final String APP_VERSION = "1.0.0";
 
     private final ExecutorService executor = Executors.newFixedThreadPool(3);
     private final List<Screen> backStack = new ArrayList<>();
@@ -70,6 +70,7 @@ public class MainActivity extends Activity {
     private TextView syncStatus;
     private EditText gridColumnsInput;
     private EditText maxRowsInput;
+    private EditText syncAlertHoursInput;
     private Screen currentScreen = Screen.titles("series", 0);
     private YearMonth calendarMonth = YearMonth.now();
     private int colorBg;
@@ -527,7 +528,9 @@ public class MainActivity extends Activity {
         content.addView(syncStatus);
         addLanguageSettings();
         addProfileSettings();
+        addMetaProfileSettings();
         addPlatformProfileSettings();
+        addSyncAlertSettings();
         addAdminSettings();
         addAdminKpis();
         addIngestionStatuses();
@@ -579,6 +582,46 @@ public class MainActivity extends Activity {
         row.addView(button, new LinearLayout.LayoutParams(0, -2, 1));
     }
 
+    private void addSyncAlertSettings() {
+        addSection(tr("sync_alert"));
+        LinearLayout panel = card();
+        panel.addView(line(tr("sync_alert_help")));
+        syncAlertHoursInput = numberInput(String.valueOf(syncAlertHours()), tr("hours"));
+        panel.addView(syncAlertHoursInput);
+        Button save = button(tr("save"), false);
+        save.setOnClickListener(v -> saveSyncAlertSettings());
+        panel.addView(save);
+        content.addView(panel);
+    }
+
+    private void saveSyncAlertSettings() {
+        int hours = clamp(parseInt(syncAlertHoursInput.getText().toString(), 24), 1, 720);
+        prefs.edit().putInt("sync_alert_hours", hours).apply();
+        progress.setVisibility(ProgressBar.VISIBLE);
+        executor.submit(() -> {
+            try {
+                JSONObject payload = new JSONObject().put("sync_alert_hours", hours);
+                JSONObject response = postJsonSync("/api/mobile/settings", payload);
+                JSONObject bootstrap = cachedJson("bootstrap");
+                if (bootstrap != null) {
+                    bootstrap.put("mobile_settings", response.optJSONObject("mobile_settings"));
+                    writeCacheJson("bootstrap", bootstrap);
+                }
+                runOnUiThread(() -> {
+                    progress.setVisibility(ProgressBar.GONE);
+                    Toast.makeText(this, tr("sync_alert_saved"), Toast.LENGTH_SHORT).show();
+                    render(Screen.admin());
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    progress.setVisibility(ProgressBar.GONE);
+                    Toast.makeText(this, tr("sync_failed") + ": " + error.getMessage(), Toast.LENGTH_LONG).show();
+                    render(Screen.admin());
+                });
+            }
+        });
+    }
+
     private void addProfileSettings() {
         addSection(tr("profile"));
         LinearLayout row = card();
@@ -613,6 +656,23 @@ public class MainActivity extends Activity {
             row.addView(button);
         }
         content.addView(row);
+    }
+
+    private void addMetaProfileSettings() {
+        JSONObject bootstrap = cachedJson("bootstrap");
+        JSONArray metaProfiles = bootstrap == null ? null : bootstrap.optJSONArray("meta_profiles");
+        if (metaProfiles == null || metaProfiles.length() == 0) return;
+        addSection(tr("meta_profiles"));
+        LinearLayout panel = card();
+        for (int index = 0; index < metaProfiles.length(); index++) {
+            JSONObject profile = metaProfiles.optJSONObject(index);
+            if (profile == null) continue;
+            String label = profile.optString("label", profile.optString("key", ""));
+            JSONObject platforms = profile.optJSONObject("platforms");
+            String suffix = platforms == null ? "" : " · " + platforms.length() + " " + tr("platforms");
+            panel.addView(line(label + suffix));
+        }
+        content.addView(panel);
     }
 
     private void addPlatformProfileSettings() {
@@ -698,14 +758,19 @@ public class MainActivity extends Activity {
         for (int index = 0; index < statuses.length(); index++) {
             JSONObject status = statuses.optJSONObject(index);
             if (status == null) continue;
-            boolean ok = "ok".equalsIgnoreCase(status.optString("status"));
-            String text = (ok ? "OK " : "KO ")
+            String state = status.optString("status");
+            boolean ok = "ok".equalsIgnoreCase(state);
+            boolean unknown = "unknown".equalsIgnoreCase(state);
+            String updatedAt = status.optString("updated_at", "");
+            String text = (ok ? "OK " : (unknown ? "? " : "KO "))
                     + status.optString("platform_label", status.optString("platform"))
-                    + " - +" + status.optInt("inserted", 0);
+                    + " - +" + status.optInt("inserted", 0)
+                    + " - "
+                    + (updatedAt.isEmpty() || "null".equals(updatedAt) ? tr("no_last_ingestion") : updatedAt);
             String error = status.optString("error", "");
             if (!ok && !error.isEmpty()) text += " - " + error;
             TextView row = line(text);
-            row.setTextColor(ok ? Color.rgb(73, 190, 137) : Color.rgb(236, 95, 103));
+            row.setTextColor(ok ? Color.rgb(73, 190, 137) : (unknown ? colorMuted : Color.rgb(236, 95, 103)));
             card.addView(row);
         }
         content.addView(card);
@@ -724,17 +789,28 @@ public class MainActivity extends Activity {
             content.addView(panel);
             return;
         }
+        LinearLayout row = null;
+        int column = 0;
         for (int index = 0; index < platforms.length(); index++) {
             JSONObject item = platforms.optJSONObject(index);
             if (item == null) continue;
             String platform = item.optString("platform", "");
             if (platform.isEmpty()) continue;
+            if (row == null || column == 2) {
+                row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                panel.addView(row);
+                column = 0;
+            }
             Button run = button(platformLabel(platform), false);
             run.setTextColor(Color.rgb(8, 16, 24));
             run.setBackground(rounded(platformColor(platform), platformColor(platform), 8));
             run.setContentDescription(tr("rpa_restart") + ": " + platformLabel(platform));
             run.setOnClickListener(v -> triggerRpa(platform));
-            panel.addView(run);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, -2, 1);
+            params.setMargins(dp(3), dp(3), dp(3), dp(3));
+            row.addView(run, params);
+            column++;
         }
         content.addView(panel);
     }
@@ -761,6 +837,7 @@ public class MainActivity extends Activity {
             try {
                 JSONObject bootstrap = fetchSync("/api/mobile/bootstrap");
                 applyDefaultProfileFromBootstrap(bootstrap);
+                applyMobileSettingsFromBootstrap(bootstrap);
                 StringBuilder debug = new StringBuilder("Début synchro\n");
                 JSONObject series = fetchAllTitles("series", fetchSync("/api/mobile/titles?type=series&per_page=100" + profileQuery()));
                 JSONObject movies = fetchAllTitles("movie", fetchSync("/api/mobile/titles?type=movie&per_page=100" + profileQuery()));
@@ -828,6 +905,7 @@ public class MainActivity extends Activity {
             try {
                 JSONObject bootstrap = fetchSync("/api/mobile/bootstrap");
                 applyDefaultProfileFromBootstrap(bootstrap);
+                applyMobileSettingsFromBootstrap(bootstrap);
                 writeCacheJson("bootstrap", bootstrap);
                 runOnUiThread(() -> {
                     bootstrapRefreshInFlight = false;
@@ -898,6 +976,15 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void applyMobileSettingsFromBootstrap(JSONObject bootstrap) {
+        if (bootstrap == null) return;
+        JSONObject settings = bootstrap.optJSONObject("mobile_settings");
+        if (settings == null) return;
+        prefs.edit()
+                .putInt("sync_alert_hours", clamp(settings.optInt("sync_alert_hours", 24), 1, 720))
+                .apply();
+    }
+
     private boolean profileExists(JSONArray profiles, String key) {
         if (profiles == null || key == null || key.isEmpty()) return false;
         for (int index = 0; index < profiles.length(); index++) {
@@ -940,15 +1027,23 @@ public class MainActivity extends Activity {
     }
 
     private JSONObject postSync(String path) throws Exception {
+        return postJsonSync(path, null);
+    }
+
+    private JSONObject postJsonSync(String path, JSONObject payload) throws Exception {
         URL endpoint = new URL(normalizedServerUrl() + path);
         HttpURLConnection connection = (HttpURLConnection) endpoint.openConnection();
         connection.setConnectTimeout(5000);
         connection.setReadTimeout(20000);
         connection.setRequestMethod("POST");
         connection.setRequestProperty("Accept", "application/json");
+        if (payload != null) {
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+        }
         connection.setDoOutput(true);
         try (OutputStream output = connection.getOutputStream()) {
-            output.write(new byte[0]);
+            byte[] body = payload == null ? new byte[0] : payload.toString().getBytes(StandardCharsets.UTF_8);
+            output.write(body);
         }
         int status = connection.getResponseCode();
         InputStream responseStream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
@@ -1145,11 +1240,14 @@ public class MainActivity extends Activity {
             case "last_ingestions": return "Dernières ingestions";
             case "last_sync": return "Dernière synchro";
             case "last_seen": return "Derniers vus";
+            case "hours": return "Heures";
             case "load_profiles": return "Charger les profils";
+            case "meta_profiles": return "Méta-profils";
             case "movies": return "Films";
             case "movies_by_platform": return "Films par plateforme";
             case "next": return "Suivant";
             case "no_data": return "Aucune donnée.";
+            case "no_last_ingestion": return "Jamais ingéré";
             case "not_configured": return "Non configuré";
             case "no_sync_yet": return "Aucune synchro lancée depuis cette installation.";
             case "no_offline_data": return "Aucune donnée offline. Va dans Admin puis lance Synchro.";
@@ -1162,6 +1260,7 @@ public class MainActivity extends Activity {
             case "page": return "Page";
             case "previous": return "Précédent";
             case "profile": return "Profil";
+            case "platforms": return "plateformes";
             case "profile_saved": return "Profil enregistré";
             case "profile_sync_required": return "Lance une synchro pour charger les profils disponibles.";
             case "quit": return "Quitter";
@@ -1185,6 +1284,10 @@ public class MainActivity extends Activity {
             case "sync_debug": return "Debug synchro";
             case "sync_done": return "Synchro terminée";
             case "sync_failed": return "Synchro impossible";
+            case "sync_alert": return "Alerte synchro";
+            case "sync_alert_help": return "Prévenir si la dernière synchro dépasse ce nombre d'heures.";
+            case "sync_alert_saved": return "Alerte synchro enregistrée";
+            case "sync_too_old": return "Alerte: synchro trop ancienne";
             case "sync_now": return "Synchroniser maintenant";
             case "sync_running": return "Synchronisation en cours...";
             case "title_az": return "Titre A-Z";
@@ -1210,11 +1313,14 @@ public class MainActivity extends Activity {
             case "last_ingestions": return "Latest ingestions";
             case "last_sync": return "Last sync";
             case "last_seen": return "Last watched";
+            case "hours": return "Hours";
             case "load_profiles": return "Load profiles";
+            case "meta_profiles": return "Meta profiles";
             case "movies": return "Movies";
             case "movies_by_platform": return "Movies by platform";
             case "next": return "Next";
             case "no_data": return "No data.";
+            case "no_last_ingestion": return "Never ingested";
             case "not_configured": return "Not configured";
             case "no_sync_yet": return "No sync has run on this installation.";
             case "no_offline_data": return "No offline data. Go to Admin and run Sync.";
@@ -1227,6 +1333,7 @@ public class MainActivity extends Activity {
             case "page": return "Page";
             case "previous": return "Previous";
             case "profile": return "Profile";
+            case "platforms": return "platforms";
             case "profile_saved": return "Profile saved";
             case "profile_sync_required": return "Run a sync to load available profiles.";
             case "quit": return "Quit";
@@ -1250,6 +1357,10 @@ public class MainActivity extends Activity {
             case "sync_debug": return "Sync debug";
             case "sync_done": return "Sync complete";
             case "sync_failed": return "Sync failed";
+            case "sync_alert": return "Sync alert";
+            case "sync_alert_help": return "Warn when the latest sync is older than this many hours.";
+            case "sync_alert_saved": return "Sync alert saved";
+            case "sync_too_old": return "Alert: sync is too old";
             case "sync_now": return "Sync now";
             case "sync_running": return "Sync in progress...";
             case "title_az": return "Title A-Z";
@@ -1275,11 +1386,14 @@ public class MainActivity extends Activity {
             case "last_ingestions": return "Últimas ingestas";
             case "last_sync": return "Última synchro";
             case "last_seen": return "Últimos vistos";
+            case "hours": return "Horas";
             case "load_profiles": return "Cargar perfiles";
+            case "meta_profiles": return "Metaperfiles";
             case "movies": return "Películas";
             case "movies_by_platform": return "Películas por plataforma";
             case "next": return "Siguiente";
             case "no_data": return "Sin datos.";
+            case "no_last_ingestion": return "Nunca ingerido";
             case "not_configured": return "No configurado";
             case "no_sync_yet": return "No se ha lanzado ninguna synchro en esta instalación.";
             case "no_offline_data": return "Sin datos offline. Ve a Admin y lanza Synchro.";
@@ -1292,6 +1406,7 @@ public class MainActivity extends Activity {
             case "page": return "Página";
             case "previous": return "Anterior";
             case "profile": return "Perfil";
+            case "platforms": return "plataformas";
             case "profile_saved": return "Perfil guardado";
             case "profile_sync_required": return "Lanza una sincronización para cargar los perfiles disponibles.";
             case "quit": return "Salir";
@@ -1315,6 +1430,10 @@ public class MainActivity extends Activity {
             case "sync_debug": return "Debug de sincronización";
             case "sync_done": return "Synchro terminada";
             case "sync_failed": return "Synchro imposible";
+            case "sync_alert": return "Alerta de sincronización";
+            case "sync_alert_help": return "Avisar si la última sincronización supera este número de horas.";
+            case "sync_alert_saved": return "Alerta de sincronización guardada";
+            case "sync_too_old": return "Alerta: sincronización demasiado antigua";
             case "sync_now": return "Sincronizar ahora";
             case "sync_running": return "Sincronización en curso...";
             case "title_az": return "Título A-Z";
@@ -1483,12 +1602,25 @@ public class MainActivity extends Activity {
         for (int index = 0; index < source.length(); index++) target.put(source.opt(index));
     }
 
+    private int syncAlertHours() {
+        int stored = prefs.getInt("sync_alert_hours", -1);
+        if (stored > 0) return clamp(stored, 1, 720);
+        JSONObject bootstrap = cachedJson("bootstrap");
+        JSONObject settings = bootstrap == null ? null : bootstrap.optJSONObject("mobile_settings");
+        return clamp(settings == null ? 24 : settings.optInt("sync_alert_hours", 24), 1, 720);
+    }
+
     private String lastSyncLabel() {
         long value = prefs.getLong("last_sync_at", 0L);
         if (value <= 0L) return tr("offline_not_synced");
         java.text.DateFormat date = android.text.format.DateFormat.getDateFormat(this);
         java.text.DateFormat time = android.text.format.DateFormat.getTimeFormat(this);
-        return tr("last_sync") + ": " + date.format(value) + " " + time.format(value);
+        String label = tr("last_sync") + ": " + date.format(value) + " " + time.format(value);
+        long maxAgeMs = syncAlertHours() * 60L * 60L * 1000L;
+        if (System.currentTimeMillis() - value > maxAgeMs) {
+            label += " · " + tr("sync_too_old") + " > " + syncAlertHours() + "h";
+        }
+        return label;
     }
 
     private void styleInput(EditText input) {
