@@ -1,0 +1,23 @@
+[
+  {
+    "key": "primary",
+    "label": "Profil principal",
+    "is_junior": false,
+    "platforms": {
+      "netflix": "Nom du profil Netflix",
+      "prime_video": "Nom du profil Prime Video",
+      "disney_plus": "Nom du profil Disney+",
+      "crunchyroll": "Nom du profil Crunchyroll",
+      "canal_plus": "Nom du profil CANAL+"
+    }
+  },
+  {
+    "key": "junior",
+    "label": "Profil junior",
+    "is_junior": true,
+    "platforms": {
+      "netflix": "Nom du profil junior Netflix",
+      "prime_video": "Nom du profil junior Prime Video"
+    }
+  }
+]

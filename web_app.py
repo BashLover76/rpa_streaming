@@ -365,6 +365,7 @@ def create_app() -> Flask:
 
     @app.get("/series/<int:series_id>")
     def series_detail(series_id: int):
+        active_profile = resolve_profile()
         serie = fetch_series(series_id)
         if serie is None:
             abort(404)
@@ -378,6 +379,7 @@ def create_app() -> Flask:
             )
         serie["genres_list"] = parse_genres(serie.get("genres"))
         related_series = fetch_related_series(series_id, serie["genres_list"])
+        profile_progress = fetch_profile_progress(series_id)
         status = infer_status(serie, upcoming, full_calendar)
         return render_template(
             "series_detail.html",
@@ -389,6 +391,8 @@ def create_app() -> Flask:
             status=status,
             platform_marks=PLATFORM_MARKS,
             related_series=related_series,
+            active_profile=active_profile,
+            profile_progress=profile_progress,
         )
 
     @app.get("/admin")
@@ -447,6 +451,8 @@ def create_app() -> Flask:
             meta_profiles=read_meta_profiles(),
             mobile_settings=read_mobile_settings(),
             platforms=fetch_admin_platforms(),
+            has_meta_profiles=has_meta_profiles(),
+            platform_labels=PLATFORM_LABELS,
         )
 
     @app.post("/admin/profiles/meta")
@@ -459,6 +465,12 @@ def create_app() -> Flask:
             key.removeprefix("platform_"): value.strip()
             for key, value in request.form.items()
             if key.startswith("platform_") and value.strip()
+        }
+        known_platforms = {item["platform"] for item in fetch_admin_platforms()}
+        mapping = {
+            platform: profile_name
+            for platform, profile_name in mapping.items()
+            if platform in known_platforms
         }
         meta_profiles = read_meta_profiles()
         meta_profiles = [
@@ -644,6 +656,7 @@ def create_app() -> Flask:
                 "default_profile_key": current_app.config["DEFAULT_PROFILE_KEY"],
                 "platform_profiles": platform_profile_options(),
                 "meta_profiles": read_meta_profiles(),
+                "has_meta_profiles": has_meta_profiles(),
                 "mobile_settings": read_mobile_settings(),
                 "rpa_platforms": fetch_admin_platforms(),
                 "ingestion_statuses": fetch_mobile_ingestion_statuses(),
@@ -655,8 +668,10 @@ def create_app() -> Flask:
         return jsonify(
             {
                 "meta_profiles": read_meta_profiles(),
+                "profiles": profile_options(),
                 "mobile_settings": read_mobile_settings(),
                 "platform_profiles": platform_profile_options(),
+                "has_meta_profiles": has_meta_profiles(),
             }
         )
 
@@ -672,6 +687,36 @@ def create_app() -> Flask:
         )
         write_json_file(MOBILE_SETTINGS_PATH, settings)
         return jsonify({"mobile_settings": settings})
+
+    @app.post("/api/mobile/profiles/meta")
+    def api_mobile_create_meta_profile():
+        payload = request.get_json(silent=True) or {}
+        label = str(payload.get("label") or "").strip()
+        profile_key = slugify(str(payload.get("key") or label))
+        mapping = payload.get("platforms")
+        if not label or not profile_key or not isinstance(mapping, dict):
+            abort(400, description="Méta-profil invalide.")
+        known_platforms = {item["platform"] for item in fetch_admin_platforms()}
+        cleaned_mapping = {
+            str(platform): str(profile_name).strip()
+            for platform, profile_name in mapping.items()
+            if platform in known_platforms and str(profile_name).strip()
+        }
+        meta_profiles = [
+            profile
+            for profile in read_meta_profiles()
+            if profile.get("key") != profile_key
+        ]
+        meta_profiles.append(
+            {
+                "key": profile_key,
+                "label": label,
+                "is_junior": bool(payload.get("is_junior", False)),
+                "platforms": cleaned_mapping,
+            }
+        )
+        write_json_file(META_PROFILES_PATH, meta_profiles)
+        return jsonify({"meta_profiles": read_meta_profiles(), "profiles": profile_options()})
 
     @app.get("/api/mobile/rpa/platforms")
     def api_mobile_rpa_platforms():
@@ -775,6 +820,7 @@ def create_app() -> Flask:
                 calendar=full_calendar,
                 upcoming=upcoming,
                 status=status,
+                profile_progress=fetch_profile_progress(title_id),
             )
         )
 
@@ -842,6 +888,19 @@ def language_url(lang: str) -> str:
 
 
 def profile_options() -> list[dict[str, Any]]:
+    meta_profiles = read_meta_profiles()
+    if meta_profiles:
+        return [
+            {
+                "key": profile["key"],
+                "label": profile["label"],
+                "technical_id": profile["key"],
+                "is_junior": bool(profile.get("is_junior", False)),
+                "platforms": profile.get("platforms", {}),
+            }
+            for profile in meta_profiles
+            if profile.get("key")
+        ]
     profiles = current_app.config.get("STREAMING_PROFILES", {})
     return [
         {
@@ -852,6 +911,10 @@ def profile_options() -> list[dict[str, Any]]:
         }
         for profile in profiles.values()
     ]
+
+
+def has_meta_profiles() -> bool:
+    return bool(read_meta_profiles())
 
 
 def platform_profile_options() -> dict[str, list[dict[str, Any]]]:
@@ -906,7 +969,9 @@ def read_discovered_platform_profiles() -> dict[str, list[dict[str, Any]]]:
 
 
 def read_meta_profiles() -> list[dict[str, Any]]:
-    value = read_json_file(META_PROFILES_PATH, [])
+    value = read_json_file(META_PROFILES_PATH, None)
+    if value is None:
+        value = read_json_file(PROFILE_MATRIX_CONFIG_PATH, [])
     if not isinstance(value, list):
         return []
     profiles = []
@@ -916,11 +981,13 @@ def read_meta_profiles() -> list[dict[str, Any]]:
         platforms = item.get("platforms")
         if platforms is None:
             platforms = item.get("platform_profiles", {})
+        profile_key = str(item.get("key", ""))
         profiles.append(
             {
-                "key": str(item.get("key", "")),
-                "label": str(item.get("label", item.get("key", ""))),
+                "key": profile_key,
+                "label": str(item.get("label", profile_key)),
                 "platforms": platforms if isinstance(platforms, dict) else {},
+                "is_junior": bool(item.get("is_junior", False)),
             }
         )
     return profiles
@@ -960,6 +1027,21 @@ def clamp_int(value: Any, default: int, minimum: int, maximum: int) -> int:
 
 
 def resolve_profile() -> dict[str, Any]:
+    meta_profiles = {profile["key"]: profile for profile in read_meta_profiles()}
+    if meta_profiles:
+        default_key = current_app.config.get("DEFAULT_PROFILE_KEY")
+        if default_key not in meta_profiles:
+            default_key = next(iter(meta_profiles))
+        requested = request.args.get("profile") or request.cookies.get("streaming_profile")
+        key = requested if requested in meta_profiles else default_key
+        profile = meta_profiles[key]
+        return {
+            "key": profile["key"],
+            "label": profile["label"],
+            "technical_id": profile["key"],
+            "is_junior": bool(profile.get("is_junior", False)),
+            "platforms": profile.get("platforms", {}),
+        }
     profiles = current_app.config.get("STREAMING_PROFILES", {})
     default_key = current_app.config.get("DEFAULT_PROFILE_KEY")
     if not profiles:
@@ -986,7 +1068,7 @@ def append_profile_filter(
     junior_only: bool = False,
 ) -> None:
     if profile_key:
-        where.append(f"({alias}.profile_key IS NULL OR {alias}.profile_key = ?)")
+        where.append(f"{alias}.profile_key = ?")
         params.append(profile_key)
     if junior_only:
         where.append(f"COALESCE({alias}.suitable_for_junior, 0) = 1")
@@ -1224,6 +1306,7 @@ ADMIN_RPA_QUEUE = STATE_DIR / "admin_rpa_queue.json"
 ADMIN_RPA_QUEUE_LOCK = STATE_DIR / "admin_rpa_queue.lock"
 ADMIN_RPA_STATUS = STATE_DIR / "admin_rpa_status.json"
 META_PROFILES_PATH = STATE_DIR / "meta_profiles.json"
+PROFILE_MATRIX_CONFIG_PATH = Path("config/profile_matrix.local.json")
 MOBILE_SETTINGS_PATH = STATE_DIR / "mobile_settings.json"
 DISCOVERED_PLATFORM_PROFILES_PATH = STATE_DIR / "platform_profiles_discovered.json"
 
@@ -2053,7 +2136,7 @@ def fetch_upcoming_releases(
         platform_filter += " AND LOWER(COALESCE(s.genres, '')) LIKE LOWER(?)"
         params.append(f"%{genre}%")
     if profile_key:
-        platform_filter += " AND (s.profile_key IS NULL OR s.profile_key = ?)"
+        platform_filter += " AND s.profile_key = ?"
         params.append(profile_key)
     if junior_only:
         platform_filter += " AND COALESCE(s.suitable_for_junior, 0) = 1"
@@ -2133,6 +2216,62 @@ def fetch_history(series_id: int) -> list[dict[str, Any]]:
             seen.add(key)
             result.append(item)
     return result
+
+
+def fetch_profile_progress(series_id: int) -> list[dict[str, Any]]:
+    profile_labels = {profile["key"]: profile["label"] for profile in profile_options()}
+    rows = (
+        get_db()
+        .execute(
+            """
+        SELECT
+            COALESCE(h.profile_key, 'unknown') AS profile_key,
+            COUNT(DISTINCT h.id) AS history_count,
+            COUNT(DISTINCT CASE WHEN h.episode IS NOT NULL THEN h.episode END) AS watched_episodes,
+            MAX(CASE WHEN h.date_vu GLOB '????-??-??*' THEN DATE(h.date_vu) END) AS last_watched_at,
+            MAX(h.progress_percent) AS progress_percent,
+            MAX(h.status) AS status
+        FROM history AS h
+        WHERE h.serie_id = ?
+        GROUP BY COALESCE(h.profile_key, 'unknown')
+        ORDER BY last_watched_at DESC NULLS LAST, profile_key
+        """,
+            (series_id,),
+        )
+        .fetchall()
+    )
+    progress = []
+    seen = set()
+    for row in rows:
+        item = dict(row)
+        key = item["profile_key"]
+        seen.add(key)
+        progress.append(
+            {
+                "profile_key": key,
+                "profile_label": profile_labels.get(key, key),
+                "history_count": item["history_count"],
+                "watched_episodes": item["watched_episodes"],
+                "last_watched_at": item["last_watched_at"],
+                "progress_percent": item["progress_percent"],
+                "status": item["status"],
+            }
+        )
+    for key, label in profile_labels.items():
+        if key in seen:
+            continue
+        progress.append(
+            {
+                "profile_key": key,
+                "profile_label": label,
+                "history_count": 0,
+                "watched_episodes": 0,
+                "last_watched_at": None,
+                "progress_percent": None,
+                "status": None,
+            }
+        )
+    return progress
 
 
 def clean_history_title(item: dict[str, Any]) -> str:
@@ -2261,6 +2400,7 @@ def mobile_title_detail(
     calendar: list[dict[str, Any]],
     upcoming: list[dict[str, Any]],
     status: dict[str, str],
+    profile_progress: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     platform = serie.get("platform") or serie.get("plateforme") or "unknown"
     content_type = (
@@ -2291,6 +2431,7 @@ def mobile_title_detail(
         "history": [mobile_history_item(item) for item in history],
         "upcoming": [mobile_calendar_episode(item) for item in upcoming],
         "calendar": [mobile_calendar_episode(item) for item in calendar],
+        "profile_progress": profile_progress or [],
     }
 
 

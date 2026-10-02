@@ -442,6 +442,23 @@ public class MainActivity extends Activity {
         }
         addSection(tr("recent_history"));
         addEpisodeList(payload.optJSONArray("history"), true);
+        addProfileProgress(payload.optJSONArray("profile_progress"));
+    }
+
+    private void addProfileProgress(JSONArray items) {
+        if (items == null || items.length() == 0) return;
+        addSection(tr("profile_progress"));
+        for (int index = 0; index < items.length(); index++) {
+            JSONObject item = items.optJSONObject(index);
+            if (item == null) continue;
+            LinearLayout row = card();
+            String label = item.optString("profile_label", item.optString("profile_key", ""));
+            String watched = item.optInt("watched_episodes", 0) + " " + tr("episodes_seen");
+            String date = item.optString("last_watched_at", "");
+            row.addView(titleText(label, 16));
+            row.addView(line(date.isEmpty() ? watched : watched + " · " + date));
+            content.addView(row);
+        }
     }
 
     private void addEpisodeList(JSONArray items, boolean watched) {
@@ -640,6 +657,9 @@ public class MainActivity extends Activity {
             return;
         }
         applyDefaultProfileFromBootstrap(bootstrap);
+        Button reloadProfiles = button(tr("load_profiles"), false);
+        reloadProfiles.setOnClickListener(v -> refreshBootstrapOnly());
+        row.addView(reloadProfiles);
         for (int index = 0; index < profiles.length(); index++) {
             JSONObject profile = profiles.optJSONObject(index);
             if (profile == null) continue;
@@ -1236,6 +1256,7 @@ public class MainActivity extends Activity {
             case "display": return "Affichage";
             case "display_help": return "Grille: colonnes 1 à 4. Pagination: nombre de lignes max par page.";
             case "display_saved": return "Affichage enregistré";
+            case "episodes_seen": return "épisodes vus";
             case "language": return "Langue";
             case "last_ingestions": return "Dernières ingestions";
             case "last_sync": return "Dernière synchro";
@@ -1260,6 +1281,7 @@ public class MainActivity extends Activity {
             case "page": return "Page";
             case "previous": return "Précédent";
             case "profile": return "Profil";
+            case "profile_progress": return "Progression par profil";
             case "platforms": return "plateformes";
             case "profile_saved": return "Profil enregistré";
             case "profile_sync_required": return "Lance une synchro pour charger les profils disponibles.";
@@ -1309,6 +1331,7 @@ public class MainActivity extends Activity {
             case "display": return "Display";
             case "display_help": return "Grid: 1 to 4 columns. Pagination: maximum rows per page.";
             case "display_saved": return "Display saved";
+            case "episodes_seen": return "episodes watched";
             case "language": return "Language";
             case "last_ingestions": return "Latest ingestions";
             case "last_sync": return "Last sync";
@@ -1333,6 +1356,7 @@ public class MainActivity extends Activity {
             case "page": return "Page";
             case "previous": return "Previous";
             case "profile": return "Profile";
+            case "profile_progress": return "Profile progress";
             case "platforms": return "platforms";
             case "profile_saved": return "Profile saved";
             case "profile_sync_required": return "Run a sync to load available profiles.";
@@ -1382,6 +1406,7 @@ public class MainActivity extends Activity {
             case "display": return "Visualización";
             case "display_help": return "Cuadrícula: 1 a 4 columnas. Paginación: filas máximas por página.";
             case "display_saved": return "Visualización guardada";
+            case "episodes_seen": return "episodios vistos";
             case "language": return "Idioma";
             case "last_ingestions": return "Últimas ingestas";
             case "last_sync": return "Última synchro";
@@ -1406,6 +1431,7 @@ public class MainActivity extends Activity {
             case "page": return "Página";
             case "previous": return "Anterior";
             case "profile": return "Perfil";
+            case "profile_progress": return "Progresión por perfil";
             case "platforms": return "plataformas";
             case "profile_saved": return "Perfil guardado";
             case "profile_sync_required": return "Lanza una sincronización para cargar los perfiles disponibles.";

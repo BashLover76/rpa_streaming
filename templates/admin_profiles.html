@@ -31,13 +31,24 @@
 </section>
 
 <section class="admin-section">
-  <h2>Nouveau méta-profil</h2>
+  <h2>{% if has_meta_profiles %}Créer / remplacer un méta-profil{% else %}Créer la matrice de profils{% endif %}</h2>
+  {% if not has_meta_profiles %}
+    <p class="muted">Aucune matrice n'existe encore sur le serveur. Sélectionne uniquement les profils des plateformes configurées pour créer un profil unifié.</p>
+  {% endif %}
   <form class="admin-profile-form" method="post" action="{{ url_for('admin_create_meta_profile') }}">
     <label>Nom affiché <input name="label" required placeholder="Famille, Perso, Enfants"></label>
     <label>Clé technique <input name="key" placeholder="famille"></label>
     <div class="profile-platform-grid">
     {% for item in platforms %}
-      <label><b class="platform-mark platform-{{ item.platform }}">{{ item.label }}</b><input name="platform_{{ item.platform }}" placeholder="Nom du profil sur {{ item.label }}"></label>
+      <label>
+        <b class="platform-mark platform-{{ item.platform }}">{{ item.label }}</b>
+        <select name="platform_{{ item.platform }}">
+          <option value="">Ignorer cette plateforme</option>
+          {% for profile in platform_profiles.get(item.platform, []) %}
+            <option value="{{ profile.platform_profile_name }}">{{ profile.platform_profile_name }}</option>
+          {% endfor %}
+        </select>
+      </label>
     {% endfor %}
     </div>
     <button type="submit">Créer / remplacer</button>
@@ -52,6 +63,13 @@
       <div>
         <strong>{{ profile.label }}</strong>
         <span>{{ profile.key }}</span>
+        {% if profile.platforms %}
+          <span>
+            {% for platform, profile_name in profile.platforms.items() %}
+              <b class="platform-mark platform-{{ platform }}">{{ platform_labels.get(platform, platform) if platform_labels is defined else platform }}</b> {{ profile_name }}
+            {% endfor %}
+          </span>
+        {% endif %}
       </div>
       <div class="row-meta">{{ profile.platforms|length }} plateformes</div>
     </article>

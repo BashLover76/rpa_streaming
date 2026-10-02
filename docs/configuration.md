@@ -127,6 +127,45 @@ plateformes sous un même méta-profil applicatif. Ces méta-profils sont stock�
 dans `.continue/meta_profiles.json` et exposés à l'application mobile via
 `/api/mobile/bootstrap`.
 
+Si aucune matrice n'existe encore, la page admin propose sa création à partir
+des profils détectés automatiquement par `tools.discover_streaming_profiles`.
+Seules les plateformes activées dans `STREAMING_PLATFORMS_FILE` sont affichées.
+Chaque plateforme apparaît avec son badge et une liste déroulante des profils
+préchargés par la synchro.
+
+Une matrice peut aussi être déclarée manuellement en copiant:
+
+```bash
+cp config/profile_matrix.example.json config/profile_matrix.local.json
+```
+
+Le serveur lit `config/profile_matrix.local.json` tant que
+`.continue/meta_profiles.json` n'a pas été créé depuis l'interface admin. Le
+format attendu est:
+
+```json
+[
+  {
+    "key": "primary",
+    "label": "Profil principal",
+    "is_junior": false,
+    "platforms": {
+      "netflix": "Profil Netflix",
+      "prime_video": "Profil Prime Video",
+      "disney_plus": "Profil Disney+"
+    }
+  }
+]
+```
+
+Lorsqu'une matrice existe, les sélecteurs web/mobile utilisent ses entrées comme
+profils actifs. Les listes de séries, films, calendriers et endpoints mobiles
+appliquent alors un filtrage strict sur `profile_key`: les données d'un autre
+profil ne sont plus mélangées au profil actif.
+
+La fiche détail d'un titre affiche aussi la progression du profil actif et des
+autres profils de la matrice lorsque l'historique local contient ces données.
+
 La page permet aussi de régler le seuil d'alerte de synchronisation mobile
 (`sync_alert_hours`). La valeur par défaut est `24` heures et elle est stockée
 dans `.continue/mobile_settings.json`.
@@ -153,6 +192,7 @@ Résumé des fichiers JSON de services:
 | `config/ollama.local.json` | Modèle, URL locale, contexte, budget de sortie et timeout |
 | `config/crunchyroll.local.json` | Identifiants API non officielle Crunchyroll et locale |
 | `config/streaming_profiles.local.json` | Profils applicatifs et profil par défaut |
+| `config/profile_matrix.local.json` | Matrice manuelle optionnelle de méta-profils inter-plateformes |
 
 Variables RPA de connexion:
 

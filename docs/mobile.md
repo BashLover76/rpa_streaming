@@ -84,6 +84,10 @@ Fonctionnalités mobiles :
   service utilisé pour chaque profil applicatif.
 - méta-profils exposés par le serveur pour regrouper plusieurs profils de
   plateformes sous une même lecture applicative.
+- bouton `Charger les profils` pour rafraîchir la matrice serveur sans attendre
+  une synchro complète.
+- détail d'un titre avec progression par profil lorsque le serveur expose
+  l'historique multi-profil.
 - alerte de fraîcheur de synchro configurable; par défaut l'application signale
   une synchro locale plus ancienne que 24 heures.
 - sélecteur de langue par drapeaux : français, anglais et espagnol.

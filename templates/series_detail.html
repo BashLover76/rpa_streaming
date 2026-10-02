@@ -115,6 +115,21 @@
       <div><dt>Dernière mise à jour</dt><dd>{{ serie.last_updated_at or serie.updated_at or "Non renseigné" }}</dd></div>
       <div><dt>BetaSeries ID</dt><dd>{{ serie.betaseries_id or "Non lié" }}</dd></div>
     </dl>
+    {% if profile_progress %}
+      <h3>Progression par profil</h3>
+      <div class="profile-progress-list">
+        {% for item in profile_progress %}
+          <div class="profile-progress-row{% if item.profile_key == active_profile.key %} active{% endif %}">
+            <strong>{{ item.profile_label }}{% if item.profile_key == active_profile.key %} · actif{% endif %}</strong>
+            <span>{{ item.watched_episodes }} épisode{% if item.watched_episodes != 1 %}s{% endif %} vu{% if item.watched_episodes != 1 %}s{% endif %}</span>
+            {% if item.progress_percent is not none %}
+              <span>{{ "%.0f"|format(item.progress_percent) }} %</span>
+            {% endif %}
+            <small>{{ item.last_watched_at or "Aucun visionnage" }}</small>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
     </details>
   </article>
 </section>

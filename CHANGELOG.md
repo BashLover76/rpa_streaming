@@ -2,6 +2,32 @@
 
 Tous les changements notables de ce projet sont documentés ici.
 
+## [1.0.1] - 2026-10-02
+
+### Ajouté
+
+- Modèle `config/profile_matrix.example.json` pour déclarer manuellement une
+  matrice de méta-profils inter-plateformes.
+- L'administration profils propose la création d'une matrice depuis les profils
+  détectés, uniquement pour les plateformes activées.
+- L'API mobile expose les profils actifs issus de la matrice et accepte la
+  création d'un méta-profil.
+- Les fiches détail web/mobile exposent la progression multi-profil quand
+  l'historique local la contient.
+
+### Modifié
+
+- Lorsqu'une matrice existe, les vues web/mobile utilisent ses profils comme
+  source active et filtrent strictement les données par `profile_key`.
+- L'application Android affiche toujours l'action `Charger les profils` dans
+  l'écran Admin.
+
+### Corrigé
+
+- La détection Netflix lit maintenant l'écran `Who's watching?` quand les
+  anciens sélecteurs de profil ne sont plus exposés dans le DOM.
+- Les profils Prime Video `Enfant` et `Enfants` sont fusionnés en `Enfants`.
+
 ## [1.0.0] - 2026-10-01
 
 ### Ajouté
