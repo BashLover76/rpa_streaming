@@ -53,6 +53,13 @@ PROFILE_MANAGEMENT_URLS = {
     "crunchyroll": "https://www.crunchyroll.com/fr/profiles/manage",
 }
 
+PROFILE_FALLBACK_URLS = {
+    "netflix": [
+        "https://www.netflix.com/profiles/manage",
+        "https://www.netflix.com/ProfilesGate",
+    ],
+}
+
 PLATFORM_PROFILE_SELECTORS = {
     "netflix": [
         "[data-uia='profile-link']",
@@ -156,15 +163,25 @@ def main() -> None:
 
 def detect_platform_profiles(page: Page, config: PlatformConfig, timeout_ms: int) -> list[str]:
     LOGGER.info("Detecting profiles for %s", config.name)
-    page.goto(profile_management_url(config), wait_until="domcontentloaded", timeout=timeout_ms)
-    page.wait_for_timeout(2_000)
-    candidates = collect_profile_texts(page, config)
+    candidates: list[str] = []
+    for url in profile_detection_urls(config):
+        page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+        page.wait_for_timeout(2_000)
+        candidates = collect_profile_texts(page, config)
+        if candidates:
+            break
     LOGGER.info("%s profiles detected: %s", config.name, candidates or "none")
     return candidates
 
 
 def profile_management_url(config: PlatformConfig) -> str:
     return PROFILE_MANAGEMENT_URLS.get(config.name, config.start_url)
+
+
+def profile_detection_urls(config: PlatformConfig) -> list[str]:
+    urls = [profile_management_url(config)]
+    urls.extend(PROFILE_FALLBACK_URLS.get(config.name, []))
+    return urls
 
 
 def collect_profile_texts(page: Page, config: PlatformConfig) -> list[str]:
@@ -190,9 +207,48 @@ def collect_profile_texts(page: Page, config: PlatformConfig) -> list[str]:
             except (PlaywrightTimeoutError, Exception):
                 continue
             profile = profile_text(text, platform=config.name)
-            if profile and profile.casefold() not in seen:
-                seen.add(profile.casefold())
+            profile = canonical_profile_name(profile)
+            profile_key = slugify(profile)
+            if profile and profile_key not in seen:
+                seen.add(profile_key)
                 names.append(profile)
+    if not names and config.name == "netflix":
+        names.extend(collect_netflix_profiles_from_visible_text(page))
+    return names
+
+
+def collect_netflix_profiles_from_visible_text(page: Page) -> list[str]:
+    try:
+        body_text = page.locator("body").inner_text(timeout=2_000)
+    except Exception:
+        return []
+    return profiles_from_netflix_text(body_text)
+
+
+def profiles_from_netflix_text(body_text: str) -> list[str]:
+    names: list[str] = []
+    seen: set[str] = set()
+    inside_profile_gate = False
+    start_markers = ("who's watching", "whos watching", "qui regarde")
+    end_markers = ("manage profiles", "gérer les profils", "gerer les profils", "done", "terminé")
+
+    for raw_line in body_text.replace("\r", "\n").split("\n"):
+        line = " ".join(raw_line.split()).strip()
+        if not line:
+            continue
+        lowered = line.casefold()
+        if any(marker in lowered for marker in start_markers):
+            inside_profile_gate = True
+            continue
+        if not inside_profile_gate:
+            continue
+        if any(marker == lowered for marker in end_markers):
+            break
+        profile = canonical_profile_name(profile_text(line, platform="netflix"))
+        profile_key = slugify(profile)
+        if profile and profile_key not in seen:
+            seen.add(profile_key)
+            names.append(profile)
     return names
 
 
@@ -292,6 +348,9 @@ def profile_text(raw: str, platform: str | None = None) -> str:
         "ajoutez un profil",
         "créer un nouveau profil",
         "creer un nouveau profil",
+        "who's watching?",
+        "whos watching?",
+        "qui regarde ?",
         "manage profiles",
         "gérer les profils",
     }
@@ -322,6 +381,12 @@ def profile_text(raw: str, platform: str | None = None) -> str:
     if any(fragment in lowered for fragment in rejected_fragments):
         return ""
     return text
+
+
+def canonical_profile_name(profile: str) -> str:
+    if slugify(profile) == "enfant":
+        return "Enfants"
+    return profile
 
 
 def clean_profile_text(raw: str) -> str:
