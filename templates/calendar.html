@@ -29,12 +29,10 @@
 {% if not episode_count %}
 <p class="empty calendar-empty" role="status">{{ t("calendar_empty") }}</p>
 {% endif %}
-<section class="release-calendar" aria-label="Sorties de {{ month_label }}">
-  {% for weekday in ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'] %}
-    <div class="calendar-weekday">{{ weekday }}</div>
-  {% endfor %}
+<section class="release-calendar compact-calendar" aria-label="Sorties de {{ month_label }}">
   {% for week in weeks %}
     {% for day in week %}
+    {% if day.episodes %}
     <div class="calendar-day{% if day.date.month != month.month %} outside-month{% endif %}{% if day.date == today %} today{% endif %}{% if not day.episodes %} no-releases{% endif %}">
       <time class="calendar-date" datetime="{{ day.date.isoformat() }}"><span class="mobile-day">{{ ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'][day.date.weekday()] }} </span>{{ day.date.day }}<span class="mobile-day"> {{ month_label.split(' ')[0]|lower }}</span></time>
       {% for episode in day.episodes %}
@@ -55,6 +53,7 @@
       </a>
       {% endfor %}
     </div>
+    {% endif %}
     {% endfor %}
   {% endfor %}
 </section>

@@ -161,12 +161,16 @@ a {
 .calendar-arrow { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 6px; font-size: 22px; }
 .calendar-arrow:hover { background: var(--panel-2); }
 .release-calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+.release-calendar.compact-calendar { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; border: 0; }
 .calendar-weekday { padding: 12px 8px; color: var(--muted); font-size: 13px; text-align: center; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .calendar-day { min-height: 132px; padding: 8px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; }
+.compact-calendar .calendar-day { min-height: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
 .calendar-date { display: block; margin-bottom: 8px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .calendar-day.today .calendar-date { color: var(--good); font-weight: 750; }
 .calendar-day.today { background: #14211a; }
+.compact-calendar .calendar-day.today { background: color-mix(in srgb, var(--good) 10%, var(--panel)); }
 .calendar-day.outside-month { background: #0c0e10; }
+.compact-calendar .calendar-day.outside-month { display: none; }
 .calendar-day.outside-month .calendar-date { opacity: .4; }
 .release-event { display: flex; gap: 7px; padding: 9px 0; border-top: 1px solid var(--line); border-left: 2px solid var(--accent); padding-left: 7px; }
 .release-event[data-platform="crunchyroll"] { border-left-color: #ff9257; }
@@ -210,6 +214,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 @media (max-width: 820px) {
   .detail-hero > .detail-poster + div { max-width: none; margin-left: 0; }
   .release-calendar { display: block; border: 0; }
+  .release-calendar.compact-calendar { display: block; }
   .calendar-weekday, .calendar-day.no-releases { display: none; }
   .calendar-day { min-height: 0; padding: 16px 0; border: 0; border-top: 1px solid var(--line); }
   .calendar-day.today { background: transparent; }
