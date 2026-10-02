@@ -17,14 +17,14 @@ DEFAULT_OUTPUT = Path(".continue/platform_profiles_discovered.json")
 
 PROFILE_TEXT_SELECTORS = [
     "[data-uia='profile-name']",
+    "[data-uia='profile-link']",
     "[data-testid*='profile' i]",
     "[aria-label*='profile' i]",
     "[aria-label*='profil' i]",
     ".profile-name",
     "[class*='profile' i]",
-    "button",
-    "a",
-    "[role='button']",
+    "[class*='avatar' i]",
+    "[data-testid*='avatar' i]",
 ]
 
 
@@ -116,7 +116,14 @@ def collect_profile_texts(page: Page, config: PlatformConfig) -> list[str]:
                 item = locator.nth(index)
                 if not item.is_visible(timeout=500):
                     continue
-                text = item.inner_text(timeout=500) or item.get_attribute("aria-label") or ""
+                if not looks_like_profile_element(item):
+                    continue
+                text = (
+                    item.inner_text(timeout=500)
+                    or item.get_attribute("aria-label")
+                    or item.get_attribute("title")
+                    or ""
+                )
             except (PlaywrightTimeoutError, Exception):
                 continue
             profile = profile_text(text)
@@ -176,7 +183,59 @@ def profile_text(raw: str) -> str:
         return ""
     if len(text) > 40:
         return ""
+    lowered = text.casefold()
+    rejected_fragments = (
+        "cookie",
+        "privacy",
+        "conditions",
+        "terms",
+        "help",
+        "support",
+        "cloudflare",
+        "captcha",
+        "login",
+        "sign in",
+        "connexion",
+        "account",
+        "feedback",
+        "footer",
+    )
+    if any(fragment in lowered for fragment in rejected_fragments):
+        return ""
     return text
+
+
+def looks_like_profile_element(item) -> bool:
+    attributes = " ".join(
+        value or ""
+        for value in [
+            item.get_attribute("data-uia"),
+            item.get_attribute("data-testid"),
+            item.get_attribute("aria-label"),
+            item.get_attribute("class"),
+            item.get_attribute("href"),
+            item.get_attribute("role"),
+            item.get_attribute("title"),
+        ]
+    ).casefold()
+    positive = ("profile", "profil", "avatar", "user", "account-menu", "accountswitch")
+    negative = (
+        "footer",
+        "help",
+        "privacy",
+        "cookie",
+        "terms",
+        "legal",
+        "login",
+        "signin",
+        "sign-in",
+        "register",
+        "support",
+        "feedback",
+    )
+    return any(token in attributes for token in positive) and not any(
+        token in attributes for token in negative
+    )
 
 
 def slugify(value: str) -> str:
