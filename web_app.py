@@ -857,8 +857,10 @@ def profile_options() -> list[dict[str, Any]]:
 def platform_profile_options() -> dict[str, list[dict[str, Any]]]:
     configured = current_app.config.get("STREAMING_PLATFORM_PROFILES", {})
     profiles = current_app.config.get("STREAMING_PROFILES", {})
-    result: dict[str, list[dict[str, Any]]] = {}
+    result: dict[str, list[dict[str, Any]]] = read_discovered_platform_profiles()
     for platform, mapping in configured.items():
+        if platform in result and result[platform]:
+            continue
         items = []
         for profile_key, platform_profile_name in mapping.items():
             profile = profiles.get(profile_key)
@@ -871,6 +873,35 @@ def platform_profile_options() -> dict[str, list[dict[str, Any]]]:
                 }
             )
         result[platform] = items
+    return result
+
+
+def read_discovered_platform_profiles() -> dict[str, list[dict[str, Any]]]:
+    value = read_json_file(DISCOVERED_PLATFORM_PROFILES_PATH, {})
+    if not isinstance(value, dict):
+        return {}
+    result: dict[str, list[dict[str, Any]]] = {}
+    for platform, profiles in value.items():
+        if not isinstance(profiles, list):
+            continue
+        items = []
+        for profile in profiles:
+            if not isinstance(profile, dict):
+                continue
+            profile_name = str(profile.get("platform_profile_name") or "").strip()
+            if not profile_name:
+                continue
+            profile_key = str(profile.get("profile_key") or slugify(profile_name))
+            items.append(
+                {
+                    "profile_key": profile_key,
+                    "profile_label": str(profile.get("profile_label") or profile_name),
+                    "platform_profile_name": profile_name,
+                    "is_junior": bool(profile.get("is_junior", False)),
+                }
+            )
+        if items:
+            result[str(platform)] = items
     return result
 
 
@@ -1194,6 +1225,7 @@ ADMIN_RPA_QUEUE_LOCK = STATE_DIR / "admin_rpa_queue.lock"
 ADMIN_RPA_STATUS = STATE_DIR / "admin_rpa_status.json"
 META_PROFILES_PATH = STATE_DIR / "meta_profiles.json"
 MOBILE_SETTINGS_PATH = STATE_DIR / "mobile_settings.json"
+DISCOVERED_PLATFORM_PROFILES_PATH = STATE_DIR / "platform_profiles_discovered.json"
 
 
 def enqueue_rpa_platform(platform: str) -> dict[str, Any]:
