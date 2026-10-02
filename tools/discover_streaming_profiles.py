@@ -15,6 +15,41 @@ from ingestion.settings import Settings
 LOGGER = logging.getLogger(__name__)
 DEFAULT_OUTPUT = Path(".continue/platform_profiles_discovered.json")
 
+PROFILE_MANAGEMENT_URLS = {
+    "netflix": "https://www.netflix.com/browse",
+    "prime_video": "https://www.primevideo.com/profiles?step=manage",
+    "disney_plus": "https://www.disneyplus.com/fr-fr/edit-profiles",
+    "crunchyroll": "https://www.crunchyroll.com/fr/profiles/manage",
+}
+
+PLATFORM_PROFILE_SELECTORS = {
+    "netflix": [
+        "[data-uia='profile-link']",
+        "[data-uia='profile-name']",
+        ".profile",
+        ".profile-name",
+    ],
+    "prime_video": [
+        "[data-testid*='profile' i]",
+        "[class*='profile' i]",
+        "[aria-label*='profile' i]",
+    ],
+    "disney_plus": [
+        "[data-testid*='profile' i]",
+        "[aria-label*='profile' i]",
+        "[aria-label*='profil' i]",
+        "[class*='profile' i]",
+        "[class*='avatar' i]",
+    ],
+    "crunchyroll": [
+        "[data-testid*='profile' i]",
+        "[aria-label*='profile' i]",
+        "[aria-label*='profil' i]",
+        "[class*='profile' i]",
+        "[class*='avatar' i]",
+    ],
+}
+
 PROFILE_TEXT_SELECTORS = [
     "[data-uia='profile-name']",
     "[data-uia='profile-link']",
@@ -89,18 +124,19 @@ def main() -> None:
 
 def detect_platform_profiles(page: Page, config: PlatformConfig, timeout_ms: int) -> list[str]:
     LOGGER.info("Detecting profiles for %s", config.name)
-    page.goto(config.start_url, wait_until="domcontentloaded", timeout=timeout_ms)
+    page.goto(profile_management_url(config), wait_until="domcontentloaded", timeout=timeout_ms)
     page.wait_for_timeout(2_000)
     candidates = collect_profile_texts(page, config)
     LOGGER.info("%s profiles detected: %s", config.name, candidates or "none")
     return candidates
 
 
+def profile_management_url(config: PlatformConfig) -> str:
+    return PROFILE_MANAGEMENT_URLS.get(config.name, config.start_url)
+
+
 def collect_profile_texts(page: Page, config: PlatformConfig) -> list[str]:
-    selectors = []
-    configured_selector = config.selectors.get("profile")
-    if configured_selector:
-        selectors.append(configured_selector)
+    selectors = list(PLATFORM_PROFILE_SELECTORS.get(config.name, []))
     selectors.extend(PROFILE_TEXT_SELECTORS)
 
     names: list[str] = []
@@ -118,12 +154,7 @@ def collect_profile_texts(page: Page, config: PlatformConfig) -> list[str]:
                     continue
                 if not looks_like_profile_element(item):
                     continue
-                text = (
-                    item.inner_text(timeout=500)
-                    or item.get_attribute("aria-label")
-                    or item.get_attribute("title")
-                    or ""
-                )
+                text = profile_text_from_element(item)
             except (PlaywrightTimeoutError, Exception):
                 continue
             profile = profile_text(text)
@@ -131,6 +162,42 @@ def collect_profile_texts(page: Page, config: PlatformConfig) -> list[str]:
                 seen.add(profile.casefold())
                 names.append(profile)
     return names
+
+
+def profile_text_from_element(item) -> str:
+    direct_values = [
+        item.inner_text(timeout=500),
+        item.get_attribute("aria-label"),
+        item.get_attribute("title"),
+    ]
+    for value in direct_values:
+        text = profile_text(value or "")
+        if text:
+            return text
+
+    child_selectors = [
+        "[data-uia='profile-name']",
+        "[class*='profile-name' i]",
+        "[data-testid*='name' i]",
+        "span",
+        "p",
+        "div",
+    ]
+    for selector in child_selectors:
+        try:
+            children = item.locator(selector)
+            count = min(children.count(), 12)
+        except Exception:
+            continue
+        for index in range(count):
+            try:
+                child_text = children.nth(index).inner_text(timeout=300)
+            except Exception:
+                continue
+            text = profile_text(child_text)
+            if text:
+                return text
+    return ""
 
 
 def profile_text(raw: str) -> str:
