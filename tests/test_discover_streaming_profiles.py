@@ -2,7 +2,13 @@ import unittest
 
 from types import SimpleNamespace
 
-from tools.discover_streaming_profiles import profile_management_url, profile_text, slugify
+from tools.discover_streaming_profiles import (
+    clean_profile_text,
+    is_junior_profile,
+    profile_management_url,
+    profile_text,
+    slugify,
+)
 
 
 class DiscoverStreamingProfilesTests(unittest.TestCase):
@@ -25,6 +31,34 @@ class DiscoverStreamingProfilesTests(unittest.TestCase):
         for value in rejected:
             with self.subTest(value=value):
                 self.assertEqual(profile_text(value), "")
+
+    def test_profile_text_removes_edit_actions_from_profile_names(self):
+        self.assertEqual(profile_text("Chris Modifier", platform="prime_video"), "Chris")
+        self.assertEqual(profile_text("Modifier Morgane", platform="disney_plus"), "Morgane")
+        self.assertEqual(clean_profile_text("Chris\nModifier"), "Chris")
+
+    def test_profile_text_rejects_add_and_done_actions(self):
+        rejected = [
+            "Ajouter",
+            "Ajouter profil",
+            "Ajouter un profil",
+            "ajoutez un profil",
+            "chris_morgane_together_ajouter",
+            "ajouter_profil",
+            "c_est_fait",
+            "C'est fait",
+            "Terminé",
+            "Créer un nouveau profil",
+            "Manage profiles",
+        ]
+        for value in rejected:
+            with self.subTest(value=value):
+                self.assertEqual(profile_text(value), "")
+
+    def test_junior_profiles_are_detected_from_known_labels(self):
+        self.assertTrue(is_junior_profile("Enfants"))
+        self.assertTrue(is_junior_profile("Jeunesse"))
+        self.assertFalse(is_junior_profile("Chris"))
 
     def test_slugify_normalizes_names_for_cache_keys(self):
         self.assertEqual(slugify("Profil principal"), "profil_principal")

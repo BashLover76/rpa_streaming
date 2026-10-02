@@ -14,6 +14,34 @@ from ingestion.settings import Settings
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_OUTPUT = Path(".continue/platform_profiles_discovered.json")
+JUNIOR_PROFILE_NAMES = {"enfants", "jeunesse", "kids", "children"}
+ACTION_WORDS = {
+    "modifier",
+    "edit",
+    "gérer",
+    "gerer",
+    "manage",
+}
+REJECTED_PROFILE_SLUGS = {
+    "ajouter",
+    "ajouter_profil",
+    "ajouter_un_profil",
+    "add",
+    "add_profile",
+    "add_a_profile",
+    "cree_un_nouveau_profil",
+    "creer_un_nouveau_profil",
+    "create_profile",
+    "create_a_profile",
+    "manage_profiles",
+    "profiles",
+    "gerer_les_profils",
+    "terminé",
+    "termine",
+    "done",
+    "c_est_fait",
+    "chris_morgane_together_ajouter",
+}
 
 PROFILE_MANAGEMENT_URLS = {
     "netflix": "https://www.netflix.com/browse",
@@ -107,6 +135,7 @@ def main() -> None:
                             "profile_key": slugify(profile),
                             "profile_label": profile,
                             "platform_profile_name": profile,
+                            "is_junior": is_junior_profile(profile),
                         }
                         for profile in profiles
                     ]
@@ -154,24 +183,24 @@ def collect_profile_texts(page: Page, config: PlatformConfig) -> list[str]:
                     continue
                 if not looks_like_profile_element(item):
                     continue
-                text = profile_text_from_element(item)
+                text = profile_text_from_element(item, config.name)
             except (PlaywrightTimeoutError, Exception):
                 continue
-            profile = profile_text(text)
+            profile = profile_text(text, platform=config.name)
             if profile and profile.casefold() not in seen:
                 seen.add(profile.casefold())
                 names.append(profile)
     return names
 
 
-def profile_text_from_element(item) -> str:
+def profile_text_from_element(item, platform: str) -> str:
     direct_values = [
         item.inner_text(timeout=500),
         item.get_attribute("aria-label"),
         item.get_attribute("title"),
     ]
     for value in direct_values:
-        text = profile_text(value or "")
+        text = profile_text(value or "", platform=platform)
         if text:
             return text
 
@@ -194,14 +223,21 @@ def profile_text_from_element(item) -> str:
                 child_text = children.nth(index).inner_text(timeout=300)
             except Exception:
                 continue
-            text = profile_text(child_text)
+            text = profile_text(child_text, platform=platform)
             if text:
                 return text
     return ""
 
 
-def profile_text(raw: str) -> str:
-    text = " ".join(raw.replace("\n", " ").split()).strip()
+def profile_text(raw: str, platform: str | None = None) -> str:
+    text = clean_profile_text(raw)
+    if not text:
+        return ""
+    slug = slugify(text)
+    if slug in REJECTED_PROFILE_SLUGS:
+        return ""
+    if "ajouter" in slug or "add_profile" in slug:
+        return ""
     rejected = {
         "",
         "accueil",
@@ -245,6 +281,16 @@ def profile_text(raw: str) -> str:
         "reject",
         "accept",
         "close",
+        "terminé",
+        "termine",
+        "c'est fait",
+        "c’est fait",
+        "ajouter un profil",
+        "ajoutez un profil",
+        "créer un nouveau profil",
+        "creer un nouveau profil",
+        "manage profiles",
+        "gérer les profils",
     }
     if text.casefold() in rejected:
         return ""
@@ -270,6 +316,30 @@ def profile_text(raw: str) -> str:
     if any(fragment in lowered for fragment in rejected_fragments):
         return ""
     return text
+
+
+def clean_profile_text(raw: str) -> str:
+    candidates = [
+        " ".join(line.split()).strip()
+        for line in raw.replace("\r", "\n").split("\n")
+        if line.strip()
+    ]
+    if not candidates:
+        candidates = [" ".join(raw.split()).strip()]
+    for candidate in candidates:
+        cleaned = remove_action_words(candidate)
+        if cleaned:
+            return cleaned
+    return ""
+
+
+def remove_action_words(value: str) -> str:
+    words = [word for word in value.split() if word.casefold() not in ACTION_WORDS]
+    return " ".join(words).strip()
+
+
+def is_junior_profile(profile_name: str) -> bool:
+    return slugify(profile_name).replace("_", " ") in JUNIOR_PROFILE_NAMES
 
 
 def looks_like_profile_element(item) -> bool:
