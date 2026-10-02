@@ -35,6 +35,9 @@ REJECTED_PROFILE_SLUGS = {
     "create_a_profile",
     "manage_profiles",
     "profiles",
+    "le_profil",
+    "les_profils",
+    "qui_regarde",
     "gerer_les_profils",
     "terminé",
     "termine",
@@ -298,6 +301,9 @@ def profile_text(raw: str, platform: str | None = None) -> str:
         return ""
     lowered = text.casefold()
     rejected_fragments = (
+        "qui regarde",
+        "le profil",
+        "les profils",
         "cookie",
         "privacy",
         "conditions",

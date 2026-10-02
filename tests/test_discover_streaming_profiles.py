@@ -43,6 +43,14 @@ class DiscoverStreamingProfilesTests(unittest.TestCase):
             "Ajouter profil",
             "Ajouter un profil",
             "ajoutez un profil",
+            "le profil",
+            "les profils",
+            "les Profils",
+            "Qui regarde ?",
+            "le profil de Chris.",
+            "le profil de léo.",
+            "le profil de Morgane.",
+            "le profil de Parents.",
             "chris_morgane_together_ajouter",
             "ajouter_profil",
             "c_est_fait",
@@ -54,6 +62,25 @@ class DiscoverStreamingProfilesTests(unittest.TestCase):
         for value in rejected:
             with self.subTest(value=value):
                 self.assertEqual(profile_text(value), "")
+
+    def test_detected_platform_noise_is_filtered(self):
+        prime = ["Qui regarde ?", "Chris", "Morgane", "Together", "Enfants", "le profil"]
+        disney = [
+            "les profils",
+            "Chris",
+            "léo",
+            "Morgane",
+            "Parents",
+            "le profil de Chris.",
+            "le profil de léo.",
+            "le profil de Morgane.",
+            "le profil de Parents.",
+        ]
+        crunchyroll = ["Chris", "Morgane", "les Profils"]
+
+        self.assertEqual([profile_text(value) for value in prime if profile_text(value)], ["Chris", "Morgane", "Together", "Enfants"])
+        self.assertEqual([profile_text(value) for value in disney if profile_text(value)], ["Chris", "léo", "Morgane", "Parents"])
+        self.assertEqual([profile_text(value) for value in crunchyroll if profile_text(value)], ["Chris", "Morgane"])
 
     def test_junior_profiles_are_detected_from_known_labels(self):
         self.assertTrue(is_junior_profile("Enfants"))
