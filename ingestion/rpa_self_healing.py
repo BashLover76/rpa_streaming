@@ -1672,11 +1672,8 @@ def _cdp_request_headers(cdp_url: str | None) -> dict[str, str]:
     return {"Host": f"127.0.0.1:{port}"}
 
 
-def _cdp_playwright_headers(cdp_url: str | None) -> list[dict[str, str]]:
-    return [
-        {"name": name, "value": value}
-        for name, value in _cdp_request_headers(cdp_url).items()
-    ]
+def _cdp_playwright_headers(cdp_url: str | None) -> dict[str, str]:
+    return _cdp_request_headers(cdp_url)
 
 
 def _looks_like_selector(selector: str) -> bool:
