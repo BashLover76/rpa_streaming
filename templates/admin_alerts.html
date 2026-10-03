@@ -34,6 +34,12 @@
       <input type="checkbox" name="hide_empty_calendar_days" value="1" {% if mobile_settings.hide_empty_calendar_days %}checked{% endif %}>
       Masquer les jours vides dans le calendrier mobile
     </label>
+    <label>Progression dans le détail mobile
+      <select name="profile_progress_scope">
+        <option value="meta" {% if mobile_settings.profile_progress_scope != 'platform' %}selected{% endif %}>Méta-profils</option>
+        <option value="platform" {% if mobile_settings.profile_progress_scope == 'platform' %}selected{% endif %}>Profils de plateforme</option>
+      </select>
+    </label>
     <button type="submit">Enregistrer</button>
   </form>
 </section>

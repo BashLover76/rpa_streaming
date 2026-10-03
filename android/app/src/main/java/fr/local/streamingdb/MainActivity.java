@@ -444,21 +444,21 @@ public class MainActivity extends Activity {
         JSONObject status = payload.optJSONObject("status");
         if (status != null) hero.addView(line(status.optString("label") + " · " + status.optString("detail")));
         Button open = button(tr("open_platform"), true);
-        open.setOnClickListener(v -> openDeepLink(payload.optString("deep_link_url")));
+        open.setOnClickListener(v -> openDeepLink(currentProfileDeepLink(payload)));
         hero.addView(open);
+        addProfileProgress(hero, payload.optJSONArray("profile_progress"));
         content.addView(hero);
         addSection(tr("recent_history"));
         addEpisodeList(payload.optJSONArray("history"), true);
-        addProfileProgress(payload.optJSONArray("profile_progress"));
         if (!"movie".equals(payload.optString("type"))) {
             addSection(tr("upcoming"));
             addEpisodeList(payload.optJSONArray("upcoming"), false);
         }
     }
 
-    private void addProfileProgress(JSONArray items) {
+    private void addProfileProgress(LinearLayout parent, JSONArray items) {
         if (items == null || items.length() == 0) return;
-        addSection(tr("profile_progress"));
+        parent.addView(titleText(tr("profile_progress"), 18));
         for (int index = 0; index < items.length(); index++) {
             JSONObject item = items.optJSONObject(index);
             if (item == null) continue;
@@ -468,8 +468,24 @@ public class MainActivity extends Activity {
             String date = item.optString("last_watched_at", "");
             row.addView(titleText(label, 16));
             row.addView(line(date.isEmpty() ? watched : watched + " · " + date));
-            content.addView(row);
+            parent.addView(row);
         }
+    }
+
+    private String currentProfileDeepLink(JSONObject payload) {
+        JSONArray history = payload.optJSONArray("history");
+        if (history != null && activeProfileKey != null && !activeProfileKey.isEmpty()) {
+            for (int index = 0; index < history.length(); index++) {
+                JSONObject item = history.optJSONObject(index);
+                if (item == null) continue;
+                String profile = item.optString("profile_key", "");
+                String link = item.optString("deep_link_url", "");
+                if (activeProfileKey.equals(profile) && !link.isEmpty() && !"null".equals(link)) {
+                    return link;
+                }
+            }
+        }
+        return payload.optString("deep_link_url");
     }
 
     private void addEpisodeList(JSONArray items, boolean watched) {
@@ -610,6 +626,7 @@ public class MainActivity extends Activity {
     private void renderAdminProfiles() {
         addSection(tr("profile"));
         addProfileSettings();
+        addProfileProgressScopeSettings();
         addCreateMetaProfileSettings();
         addMetaProfileSettings();
         addPlatformProfileSettings();
@@ -776,6 +793,49 @@ public class MainActivity extends Activity {
             row.addView(button);
         }
         content.addView(row);
+    }
+
+    private void addProfileProgressScopeSettings() {
+        LinearLayout panel = card();
+        panel.addView(titleText(tr("profile_progress_scope"), 16));
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        String current = prefs.getString("profile_progress_scope", "meta");
+        Button meta = button(tr("meta_profiles"), "meta".equals(current));
+        meta.setOnClickListener(v -> saveProfileProgressScope("meta"));
+        row.addView(meta, new LinearLayout.LayoutParams(0, -2, 1));
+        Button platform = button(tr("platform_profile_progress"), "platform".equals(current));
+        platform.setOnClickListener(v -> saveProfileProgressScope("platform"));
+        row.addView(platform, new LinearLayout.LayoutParams(0, -2, 1));
+        panel.addView(row);
+        content.addView(panel);
+    }
+
+    private void saveProfileProgressScope(String scope) {
+        prefs.edit().putString("profile_progress_scope", scope).apply();
+        progress.setVisibility(ProgressBar.VISIBLE);
+        executor.submit(() -> {
+            try {
+                JSONObject payload = new JSONObject().put("profile_progress_scope", scope);
+                JSONObject response = postJsonSync("/api/mobile/settings", payload);
+                JSONObject bootstrap = cachedJson("bootstrap");
+                if (bootstrap != null) {
+                    bootstrap.put("mobile_settings", response.optJSONObject("mobile_settings"));
+                    writeCacheJson("bootstrap", bootstrap);
+                }
+                runOnUiThread(() -> {
+                    progress.setVisibility(ProgressBar.GONE);
+                    Toast.makeText(this, tr("profile_saved"), Toast.LENGTH_SHORT).show();
+                    render(Screen.admin());
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    progress.setVisibility(ProgressBar.GONE);
+                    Toast.makeText(this, tr("sync_failed") + ": " + error.getMessage(), Toast.LENGTH_LONG).show();
+                    render(Screen.admin());
+                });
+            }
+        });
     }
 
     private void addMetaProfileSettings() {
@@ -1190,6 +1250,7 @@ public class MainActivity extends Activity {
                 .putBoolean("sync_alert_enabled", settings.optBoolean("sync_alert_enabled", true))
                 .putBoolean("episode_alert_enabled", settings.optBoolean("episode_alert_enabled", false))
                 .putBoolean("hide_empty_calendar_days", settings.optBoolean("hide_empty_calendar_days", false))
+                .putString("profile_progress_scope", settings.optString("profile_progress_scope", "meta"))
                 .apply();
     }
 
@@ -1496,7 +1557,9 @@ public class MainActivity extends Activity {
             case "profile_label": return "Nom du profil";
             case "profile_label_required": return "Le nom du profil est obligatoire";
             case "profile_progress": return "Progression par profil";
+            case "profile_progress_scope": return "Type de progression";
             case "platforms": return "plateformes";
+            case "platform_profile_progress": return "Profils plateforme";
             case "profile_saved": return "Profil enregistré";
             case "profile_sync_required": return "Lance une synchro pour charger les profils disponibles.";
             case "quit": return "Quitter";
@@ -1581,7 +1644,9 @@ public class MainActivity extends Activity {
             case "profile_label": return "Profile name";
             case "profile_label_required": return "Profile name is required";
             case "profile_progress": return "Profile progress";
+            case "profile_progress_scope": return "Progress display";
             case "platforms": return "platforms";
+            case "platform_profile_progress": return "Platform profiles";
             case "profile_saved": return "Profile saved";
             case "profile_sync_required": return "Run a sync to load available profiles.";
             case "quit": return "Quit";
@@ -1666,7 +1731,9 @@ public class MainActivity extends Activity {
             case "profile_label": return "Nombre del perfil";
             case "profile_label_required": return "El nombre del perfil es obligatorio";
             case "profile_progress": return "Progresión por perfil";
+            case "profile_progress_scope": return "Tipo de progresión";
             case "platforms": return "plataformas";
+            case "platform_profile_progress": return "Perfiles plataforma";
             case "profile_saved": return "Perfil guardado";
             case "profile_sync_required": return "Lanza una sincronización para cargar los perfiles disponibles.";
             case "quit": return "Salir";

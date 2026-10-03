@@ -495,6 +495,11 @@ def create_app() -> Flask:
         settings["sync_alert_enabled"] = request.form.get("sync_alert_enabled") == "1"
         settings["episode_alert_enabled"] = request.form.get("episode_alert_enabled") == "1"
         settings["hide_empty_calendar_days"] = request.form.get("hide_empty_calendar_days") == "1"
+        settings["profile_progress_scope"] = (
+            "platform"
+            if request.form.get("profile_progress_scope") == "platform"
+            else "meta"
+        )
         write_json_file(MOBILE_SETTINGS_PATH, settings)
         return redirect(url_for("admin_alerts_view", saved="1"))
 
@@ -724,6 +729,8 @@ def create_app() -> Flask:
             settings["episode_alert_enabled"] = bool(payload.get("episode_alert_enabled"))
         if "hide_empty_calendar_days" in payload:
             settings["hide_empty_calendar_days"] = bool(payload.get("hide_empty_calendar_days"))
+        if payload.get("profile_progress_scope") in {"meta", "platform"}:
+            settings["profile_progress_scope"] = payload.get("profile_progress_scope")
         write_json_file(MOBILE_SETTINGS_PATH, settings)
         return jsonify({"mobile_settings": settings})
 
@@ -866,7 +873,10 @@ def create_app() -> Flask:
                 calendar=full_calendar,
                 upcoming=upcoming,
                 status=status,
-                profile_progress=fetch_profile_progress(title_id),
+                profile_progress=fetch_profile_progress(
+                    title_id,
+                    scope=read_mobile_settings()["profile_progress_scope"],
+                ),
             )
         )
 
@@ -1048,6 +1058,11 @@ def read_mobile_settings() -> dict[str, Any]:
         "sync_alert_enabled": bool(settings.get("sync_alert_enabled", True)),
         "episode_alert_enabled": bool(settings.get("episode_alert_enabled", False)),
         "hide_empty_calendar_days": bool(settings.get("hide_empty_calendar_days", False)),
+        "profile_progress_scope": (
+            "platform"
+            if settings.get("profile_progress_scope") == "platform"
+            else "meta"
+        ),
     }
 
 
@@ -2407,8 +2422,18 @@ def fetch_history(series_id: int) -> list[dict[str, Any]]:
     return result
 
 
-def fetch_profile_progress(series_id: int) -> list[dict[str, Any]]:
+def fetch_profile_progress(series_id: int, *, scope: str = "meta") -> list[dict[str, Any]]:
     profile_labels = {profile["key"]: profile["label"] for profile in profile_options()}
+    platform = (
+        get_db()
+        .execute(
+            "SELECT COALESCE(plateforme, 'unknown') AS platform FROM series WHERE id = ?",
+            (series_id,),
+        )
+        .fetchone()
+    )
+    platform_key = platform["platform"] if platform else "unknown"
+    platform_profile_labels = platform_profile_labels_for(platform_key)
     rows = (
         get_db()
         .execute(
@@ -2434,11 +2459,15 @@ def fetch_profile_progress(series_id: int) -> list[dict[str, Any]]:
     for row in rows:
         item = dict(row)
         key = item["profile_key"]
+        label = profile_labels.get(key, key)
+        if scope == "platform":
+            label = platform_profile_labels.get(key, label)
+            key = f"{platform_key}:{label}"
         seen.add(key)
         progress.append(
             {
                 "profile_key": key,
-                "profile_label": profile_labels.get(key, key),
+                "profile_label": label,
                 "history_count": item["history_count"],
                 "watched_episodes": item["watched_episodes"],
                 "last_watched_at": item["last_watched_at"],
@@ -2446,12 +2475,16 @@ def fetch_profile_progress(series_id: int) -> list[dict[str, Any]]:
                 "status": item["status"],
             }
         )
-    for key, label in profile_labels.items():
-        if key in seen:
+    source_labels = (
+        platform_profile_labels if scope == "platform" else profile_labels
+    )
+    for key, label in source_labels.items():
+        display_key = f"{platform_key}:{label}" if scope == "platform" else key
+        if display_key in seen:
             continue
         progress.append(
             {
-                "profile_key": key,
+                "profile_key": display_key,
                 "profile_label": label,
                 "history_count": 0,
                 "watched_episodes": 0,
@@ -2461,6 +2494,19 @@ def fetch_profile_progress(series_id: int) -> list[dict[str, Any]]:
             }
         )
     return progress
+
+
+def platform_profile_labels_for(platform: str) -> dict[str, str]:
+    labels = {}
+    for profile in read_meta_profiles():
+        key = str(profile.get("key") or "")
+        mapping = profile.get("platforms")
+        if not key or not isinstance(mapping, dict):
+            continue
+        profile_name = str(mapping.get(platform) or "").strip()
+        if profile_name:
+            labels[key] = profile_name
+    return labels
 
 
 def clean_history_title(item: dict[str, Any]) -> str:
