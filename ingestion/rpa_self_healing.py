@@ -492,6 +492,9 @@ class SelfHealingRPA:
     def _select_profile_if_needed(self, page: Page, config: PlatformConfig) -> None:
         if config.name == "canal_plus" or not config.profile_name:
             return
+        if config.name == "netflix":
+            self._select_netflix_profile(page, config)
+            return
         selector = config.selectors.get("profile") or (
             "button, a, [role='button'], [data-testid*='profile'], "
             "[class*='profile'], [aria-label]"
@@ -511,6 +514,62 @@ class SelfHealingRPA:
             "%s profile '%s' not visible on current page; continuing with active session",
             config.name,
             config.profile_name,
+        )
+
+    def _select_netflix_profile(self, page: Page, config: PlatformConfig) -> None:
+        """Select the requested Netflix profile before opening viewing activity.
+
+        Netflix keeps the last selected profile in the browser session. When the
+        RPA starts directly on /viewingactivity, Netflix may silently use that
+        active profile. For multi-profile ingestion this is worse than a hard
+        failure, because it writes one profile's history under another profile.
+        We therefore force the profile gate first and only continue if the
+        requested profile was clicked.
+        """
+        assert config.profile_name is not None
+        profile_name = config.profile_name.strip()
+        if not profile_name:
+            return
+
+        profile_gate_urls = (
+            "https://www.netflix.com/ProfilesGate",
+            "https://www.netflix.com/browse",
+        )
+        selector = config.selectors.get("profile") or (
+            "[data-uia='profile-link'], [data-uia='profile-name'], "
+            ".profile, .profile-name, button, a, [role='button']"
+        )
+        for profile_gate_url in profile_gate_urls:
+            try:
+                page.goto(profile_gate_url, wait_until="domcontentloaded", timeout=60_000)
+                page.wait_for_timeout(2_000)
+            except Exception as exc:
+                LOGGER.warning(
+                    "netflix could not open profile gate %s: %s",
+                    profile_gate_url,
+                    exc,
+                )
+                continue
+            if self._page_looks_like_login(page, config):
+                return
+            if self._click_visible_by_text(page, selector, profile_name):
+                page.wait_for_load_state("domcontentloaded", timeout=20_000)
+                page.wait_for_timeout(2_000)
+                page.goto(config.start_url, wait_until="domcontentloaded", timeout=60_000)
+                page.wait_for_timeout(2_000)
+                LOGGER.info(
+                    "netflix selected configured profile '%s'; url=%s title=%s",
+                    profile_name,
+                    _safe_page_url(page.url),
+                    page.title(),
+                )
+                return
+
+        raise RuntimeError(
+            "Netflix profile selection failed: requested profile "
+            f"'{profile_name}' was not visible. Open Netflix in the connected "
+            "Chrome session, confirm the profile chooser is available, then retry. "
+            "The run was stopped to avoid ingesting another profile's history."
         )
 
     @staticmethod
