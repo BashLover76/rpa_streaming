@@ -23,6 +23,44 @@ from .title_resolution import split_streaming_title
 
 LOGGER = logging.getLogger(__name__)
 
+PROFILE_GATE_URLS = {
+    "netflix": (
+        "https://www.netflix.com/ProfilesGate",
+        "https://www.netflix.com/browse",
+    ),
+    "prime_video": (
+        "https://www.primevideo.com/profiles?step=manage",
+        "https://www.primevideo.com/",
+    ),
+    "disney_plus": (
+        "https://www.disneyplus.com/fr-fr/edit-profiles",
+        "https://www.disneyplus.com/home",
+    ),
+    "crunchyroll": (
+        "https://www.crunchyroll.com/fr/profiles/manage",
+        "https://www.crunchyroll.com/fr/",
+    ),
+}
+
+PROFILE_GATE_SELECTORS = {
+    "netflix": (
+        "[data-uia='profile-link'], [data-uia='profile-name'], "
+        ".profile, .profile-name, button, a, [role='button']"
+    ),
+    "prime_video": (
+        "[data-testid*='profile' i], [aria-label*='profile' i], "
+        "[aria-label*='profil' i], button, a, [role='button']"
+    ),
+    "disney_plus": (
+        "[data-testid*='profile' i], [aria-label*='profile' i], "
+        "[aria-label*='profil' i], button, a, [role='button']"
+    ),
+    "crunchyroll": (
+        "[data-testid*='profile' i], [aria-label*='profile' i], "
+        "[aria-label*='profil' i], button, a, [role='button']"
+    ),
+}
+
 
 class CDPConnectionError(RuntimeError):
     """Raised when Chrome DevTools is reachable but Playwright cannot attach."""
@@ -482,6 +520,12 @@ class SelfHealingRPA:
                 page.title(),
             )
             return
+        if config.strict_history_scope and config.profile_name:
+            raise RuntimeError(
+                "canal_plus profile selection failed: requested profile "
+                f"'{config.profile_name}' was not visible on the profile chooser. "
+                "The run was stopped to avoid ingesting another profile's history."
+            )
         if self._click_first_visible(page, config.selectors.get("profile")):
             page.wait_for_load_state("domcontentloaded", timeout=20_000)
             page.wait_for_timeout(2_000)
@@ -492,8 +536,8 @@ class SelfHealingRPA:
     def _select_profile_if_needed(self, page: Page, config: PlatformConfig) -> None:
         if config.name == "canal_plus" or not config.profile_name:
             return
-        if config.name == "netflix":
-            self._select_netflix_profile(page, config)
+        if config.name in PROFILE_GATE_URLS:
+            self._select_profile_from_gate(page, config)
             return
         selector = config.selectors.get("profile") or (
             "button, a, [role='button'], [data-testid*='profile'], "
@@ -515,37 +559,41 @@ class SelfHealingRPA:
             config.name,
             config.profile_name,
         )
+        if config.strict_history_scope:
+            raise RuntimeError(
+                f"{config.name} profile selection failed: requested profile "
+                f"'{config.profile_name}' was not visible. The run was stopped "
+                "to avoid ingesting another profile's history."
+            )
 
-    def _select_netflix_profile(self, page: Page, config: PlatformConfig) -> None:
-        """Select the requested Netflix profile before opening viewing activity.
+    def _select_profile_from_gate(self, page: Page, config: PlatformConfig) -> None:
+        """Select the requested platform profile before opening history.
 
-        Netflix keeps the last selected profile in the browser session. When the
-        RPA starts directly on /viewingactivity, Netflix may silently use that
+        Streaming services keep the last selected profile in the browser
+        session. Starting directly on the history page may silently use that
         active profile. For multi-profile ingestion this is worse than a hard
         failure, because it writes one profile's history under another profile.
-        We therefore force the profile gate first and only continue if the
-        requested profile was clicked.
+        We therefore force the profile gate first on platforms where we know
+        that route, then only continue when the requested profile was clicked.
         """
         assert config.profile_name is not None
         profile_name = config.profile_name.strip()
         if not profile_name:
             return
 
-        profile_gate_urls = (
-            "https://www.netflix.com/ProfilesGate",
-            "https://www.netflix.com/browse",
+        selector = (
+            config.selectors.get("profile")
+            or PROFILE_GATE_SELECTORS.get(config.name)
+            or "button, a, [role='button'], [aria-label]"
         )
-        selector = config.selectors.get("profile") or (
-            "[data-uia='profile-link'], [data-uia='profile-name'], "
-            ".profile, .profile-name, button, a, [role='button']"
-        )
-        for profile_gate_url in profile_gate_urls:
+        for profile_gate_url in PROFILE_GATE_URLS.get(config.name, ()):
             try:
                 page.goto(profile_gate_url, wait_until="domcontentloaded", timeout=60_000)
                 page.wait_for_timeout(2_000)
             except Exception as exc:
                 LOGGER.warning(
-                    "netflix could not open profile gate %s: %s",
+                    "%s could not open profile gate %s: %s",
+                    config.name,
                     profile_gate_url,
                     exc,
                 )
@@ -558,7 +606,8 @@ class SelfHealingRPA:
                 page.goto(config.start_url, wait_until="domcontentloaded", timeout=60_000)
                 page.wait_for_timeout(2_000)
                 LOGGER.info(
-                    "netflix selected configured profile '%s'; url=%s title=%s",
+                    "%s selected configured profile '%s'; url=%s title=%s",
+                    config.name,
                     profile_name,
                     _safe_page_url(page.url),
                     page.title(),
@@ -566,10 +615,11 @@ class SelfHealingRPA:
                 return
 
         raise RuntimeError(
-            "Netflix profile selection failed: requested profile "
-            f"'{profile_name}' was not visible. Open Netflix in the connected "
-            "Chrome session, confirm the profile chooser is available, then retry. "
-            "The run was stopped to avoid ingesting another profile's history."
+            f"{config.name} profile selection failed: requested profile "
+            f"'{profile_name}' was not visible. Open the platform in the "
+            "connected Chrome session, confirm the profile chooser is available, "
+            "then retry. The run was stopped to avoid ingesting another profile's "
+            "history."
         )
 
     @staticmethod
