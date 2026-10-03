@@ -12,8 +12,12 @@ Tous les changements notables de ce projet sont documentés ici.
   détectés, uniquement pour les plateformes activées.
 - L'API mobile expose les profils actifs issus de la matrice et accepte la
   création d'un méta-profil.
+- L'application Android permet de créer un méta-profil directement depuis
+  l'écran Admin, à partir des profils plateforme chargés depuis le serveur.
 - Les fiches détail web/mobile exposent la progression multi-profil quand
   l'historique local la contient.
+- La page admin des suppressions expose un bouton `Delete Data` protégé par
+  une confirmation textuelle `DELETE` et une sauvegarde SQLite préalable.
 
 ### Modifié
 
@@ -21,6 +25,8 @@ Tous les changements notables de ce projet sont documentés ici.
   source active et filtrent strictement les données par `profile_key`.
 - L'application Android affiche toujours l'action `Charger les profils` dans
   l'écran Admin.
+- Les relances RPA web/mobile lancées depuis l'administration ciblent
+  uniquement le profil actif sélectionné au lieu de parcourir toute la matrice.
 
 ### Corrigé
 

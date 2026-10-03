@@ -520,12 +520,33 @@ def create_app() -> Flask:
             )
         )
 
+    @app.post("/admin/data/delete")
+    def admin_delete_all_data():
+        if request.form.get("confirmation") != "DELETE":
+            abort(400, description="Confirmation invalide.")
+        db_path = Path(current_app.config["DB_PATH"])
+        backup = backup_database(db_path, "delete-all-data")
+        with sqlite3.connect(db_path) as conn:
+            conn.execute("PRAGMA foreign_keys = ON")
+            for table_name in (
+                "history",
+                "calendar",
+                "series_aliases",
+                "series_sources",
+                "raw_history",
+                "raw_history_cards",
+                "series",
+            ):
+                conn.execute(f"DELETE FROM {table_name}")
+        return redirect(url_for("admin_delete_view", deleted_data=1, backup=backup.name))
+
     @app.post("/admin/rpa/<platform>/run")
     def admin_run_rpa(platform: str):
         known_platforms = {item["platform"] for item in fetch_admin_platforms()}
         if platform not in known_platforms:
             abort(404)
-        job = enqueue_rpa_platform(platform)
+        active_profile = resolve_profile()
+        job = enqueue_rpa_platform(platform, profile_key=active_profile["key"])
         return redirect(
             url_for(
                 "admin_rpa_view",
@@ -727,11 +748,13 @@ def create_app() -> Flask:
         known_platforms = {item["platform"] for item in fetch_admin_platforms()}
         if platform not in known_platforms:
             abort(404)
-        job = enqueue_rpa_platform(platform)
+        active_profile = resolve_profile()
+        job = enqueue_rpa_platform(platform, profile_key=active_profile["key"])
         return jsonify(
             {
                 "status": "queued",
                 "platform": platform,
+                "profile": active_profile,
                 "log": Path(job["log_path"]).name,
             }
         )
@@ -1311,11 +1334,12 @@ MOBILE_SETTINGS_PATH = STATE_DIR / "mobile_settings.json"
 DISCOVERED_PLATFORM_PROFILES_PATH = STATE_DIR / "platform_profiles_discovered.json"
 
 
-def enqueue_rpa_platform(platform: str) -> dict[str, Any]:
+def enqueue_rpa_platform(platform: str, *, profile_key: str | None = None) -> dict[str, Any]:
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     job = {
         "id": uuid.uuid4().hex,
         "platform": platform,
+        "profile_key": profile_key,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "log_path": str(Path("logs") / f"admin-rpa-{platform}-{timestamp}.log"),
     }

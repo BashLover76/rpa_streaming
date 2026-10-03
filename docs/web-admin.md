@@ -45,6 +45,11 @@ dans `.env`). La confirmation exige de saisir `SUPPRIMER`; une copie SQLite horo
 créée dans `backups/` avant l'opération. Cette action ne modifie aucun compte
 de streaming et ne désabonne pas la série de BetaSeries.
 
+La même page expose aussi une zone `Delete Data`. Elle supprime toutes les
+données locales d'ingestion (séries, films, calendrier, historique, alias,
+sources et cartes brutes) uniquement après saisie exacte de `DELETE`. Une
+sauvegarde SQLite horodatée est créée dans `backups/` avant la purge.
+
 La page `/admin/profiles` centralise les réglages multi-profils :
 
 - création ou remplacement d'un méta-profil applicatif ;
@@ -57,6 +62,9 @@ La page `/admin/profiles` centralise les réglages multi-profils :
 La page `/admin/rpa` présente uniquement les plateformes RPA activées. Les
 actions de relance sont affichées deux par ligne et les plateformes absentes ou
 désactivées dans la configuration ne sont pas proposées.
+Chaque relance admin est lancée en mode différentiel et ciblée sur le profil
+actif sélectionné dans l'interface, via `--profile-key`. Elle ne parcourt donc
+pas toute la matrice des profils par défaut.
 
 Pour demander la suppression de l'historique sur les plateformes connectées,
 le script RPA fonctionne en aperçu par défaut. Il ouvre les pages configurées,

@@ -24,6 +24,8 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
+import android.widget.ArrayAdapter;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -49,7 +51,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -545,6 +549,7 @@ public class MainActivity extends Activity {
         content.addView(syncStatus);
         addLanguageSettings();
         addProfileSettings();
+        addCreateMetaProfileSettings();
         addMetaProfileSettings();
         addPlatformProfileSettings();
         addSyncAlertSettings();
@@ -693,6 +698,92 @@ public class MainActivity extends Activity {
             panel.addView(line(label + suffix));
         }
         content.addView(panel);
+    }
+
+    private void addCreateMetaProfileSettings() {
+        JSONObject bootstrap = cachedJson("bootstrap");
+        JSONObject platformProfiles = bootstrap == null ? null : bootstrap.optJSONObject("platform_profiles");
+        if (platformProfiles == null || platformProfiles.length() == 0) return;
+        addSection(tr("create_profile"));
+        LinearLayout panel = card();
+        EditText labelInput = textInput("", tr("profile_label"));
+        EditText keyInput = textInput("", tr("profile_key"));
+        panel.addView(labelInput);
+        panel.addView(keyInput);
+
+        Map<String, Spinner> selectors = new LinkedHashMap<>();
+        JSONArray platformNames = platformProfiles.names();
+        if (platformNames != null) {
+            List<String> sortedPlatforms = new ArrayList<>();
+            for (int index = 0; index < platformNames.length(); index++) {
+                sortedPlatforms.add(platformNames.optString(index));
+            }
+            sortedPlatforms.sort(String::compareTo);
+            for (String platform : sortedPlatforms) {
+                JSONArray profiles = platformProfiles.optJSONArray(platform);
+                if (profiles == null || profiles.length() == 0) continue;
+                panel.addView(titleText(platformLabel(platform), 15));
+                List<String> values = new ArrayList<>();
+                values.add("");
+                for (int index = 0; index < profiles.length(); index++) {
+                    JSONObject profile = profiles.optJSONObject(index);
+                    if (profile == null) continue;
+                    String name = profile.optString("platform_profile_name", "").trim();
+                    if (!name.isEmpty() && !values.contains(name)) values.add(name);
+                }
+                if (values.size() <= 1) continue;
+                Spinner spinner = new Spinner(this);
+                spinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, values));
+                panel.addView(spinner);
+                selectors.put(platform, spinner);
+            }
+        }
+
+        Button create = button(tr("create_profile"), true);
+        create.setOnClickListener(v -> createMetaProfile(labelInput, keyInput, selectors));
+        panel.addView(create);
+        content.addView(panel);
+    }
+
+    private void createMetaProfile(EditText labelInput, EditText keyInput, Map<String, Spinner> selectors) {
+        String label = labelInput.getText().toString().trim();
+        if (label.isEmpty()) {
+            Toast.makeText(this, tr("profile_label_required"), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        progress.setVisibility(ProgressBar.VISIBLE);
+        executor.submit(() -> {
+            try {
+                JSONObject platforms = new JSONObject();
+                for (Map.Entry<String, Spinner> entry : selectors.entrySet()) {
+                    Object selected = entry.getValue().getSelectedItem();
+                    String profileName = selected == null ? "" : selected.toString().trim();
+                    if (!profileName.isEmpty()) platforms.put(entry.getKey(), profileName);
+                }
+                JSONObject payload = new JSONObject()
+                        .put("label", label)
+                        .put("key", keyInput.getText().toString().trim())
+                        .put("platforms", platforms);
+                JSONObject response = postJsonSync("/api/mobile/profiles/meta", payload);
+                JSONObject bootstrap = cachedJson("bootstrap");
+                if (bootstrap != null) {
+                    bootstrap.put("profiles", response.optJSONArray("profiles"));
+                    bootstrap.put("meta_profiles", response.optJSONArray("meta_profiles"));
+                    bootstrap.put("has_meta_profiles", true);
+                    writeCacheJson("bootstrap", bootstrap);
+                }
+                runOnUiThread(() -> {
+                    progress.setVisibility(ProgressBar.GONE);
+                    Toast.makeText(this, tr("profile_saved"), Toast.LENGTH_SHORT).show();
+                    render(Screen.admin());
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    progress.setVisibility(ProgressBar.GONE);
+                    Toast.makeText(this, tr("sync_failed") + ": " + error.getMessage(), Toast.LENGTH_LONG).show();
+                });
+            }
+        });
     }
 
     private void addPlatformProfileSettings() {
@@ -1252,6 +1343,7 @@ public class MainActivity extends Activity {
             case "calendar_unavailable": return "Calendrier offline indisponible. Va dans Admin puis lance Synchro.";
             case "cards": return "fiches";
             case "columns_hint": return "Colonnes 1-4";
+            case "create_profile": return "Créer un profil";
             case "detail_unavailable": return "Détail indisponible offline. Relance une Synchro.";
             case "display": return "Affichage";
             case "display_help": return "Grille: colonnes 1 à 4. Pagination: nombre de lignes max par page.";
@@ -1281,6 +1373,9 @@ public class MainActivity extends Activity {
             case "page": return "Page";
             case "previous": return "Précédent";
             case "profile": return "Profil";
+            case "profile_key": return "Clé technique";
+            case "profile_label": return "Nom du profil";
+            case "profile_label_required": return "Le nom du profil est obligatoire";
             case "profile_progress": return "Progression par profil";
             case "platforms": return "plateformes";
             case "profile_saved": return "Profil enregistré";
@@ -1327,6 +1422,7 @@ public class MainActivity extends Activity {
             case "calendar_unavailable": return "Offline calendar unavailable. Go to Admin and run Sync.";
             case "cards": return "cards";
             case "columns_hint": return "Columns 1-4";
+            case "create_profile": return "Create profile";
             case "detail_unavailable": return "Detail unavailable offline. Run Sync again.";
             case "display": return "Display";
             case "display_help": return "Grid: 1 to 4 columns. Pagination: maximum rows per page.";
@@ -1356,6 +1452,9 @@ public class MainActivity extends Activity {
             case "page": return "Page";
             case "previous": return "Previous";
             case "profile": return "Profile";
+            case "profile_key": return "Technical key";
+            case "profile_label": return "Profile name";
+            case "profile_label_required": return "Profile name is required";
             case "profile_progress": return "Profile progress";
             case "platforms": return "platforms";
             case "profile_saved": return "Profile saved";
@@ -1402,6 +1501,7 @@ public class MainActivity extends Activity {
             case "calendar_unavailable": return "Calendario offline no disponible. Ve a Admin y lanza Synchro.";
             case "cards": return "fichas";
             case "columns_hint": return "Columnas 1-4";
+            case "create_profile": return "Crear perfil";
             case "detail_unavailable": return "Detalle no disponible offline. Lanza Synchro de nuevo.";
             case "display": return "Visualización";
             case "display_help": return "Cuadrícula: 1 a 4 columnas. Paginación: filas máximas por página.";
@@ -1431,6 +1531,9 @@ public class MainActivity extends Activity {
             case "page": return "Página";
             case "previous": return "Anterior";
             case "profile": return "Perfil";
+            case "profile_key": return "Clave técnica";
+            case "profile_label": return "Nombre del perfil";
+            case "profile_label_required": return "El nombre del perfil es obligatorio";
             case "profile_progress": return "Progresión por perfil";
             case "platforms": return "plataformas";
             case "profile_saved": return "Perfil guardado";
@@ -1563,6 +1666,14 @@ public class MainActivity extends Activity {
         input.setHint(hint);
         input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         input.setKeyListener(DigitsKeyListener.getInstance("0123456789"));
+        styleInput(input);
+        return input;
+    }
+
+    private EditText textInput(String value, String hint) {
+        EditText input = new EditText(this);
+        input.setText(value);
+        input.setHint(hint);
         styleInput(input);
         return input;
     }

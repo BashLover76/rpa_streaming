@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import replace
+import json
 import logging
 import sys
 import time
@@ -23,7 +24,7 @@ from ingestion.runtime_platform import (
     terminate_chrome_processes,
     wait_for_chrome_cdp,
 )
-from ingestion.settings import Settings
+from ingestion.settings import Settings, StreamingProfile
 from ingestion.catalog_pipeline import CatalogPipeline
 from ingestion.title_resolution import IMDbClient, TitleResolver
 
@@ -262,21 +263,23 @@ def expand_platform_profiles(
     all_profiles: bool,
     content_type: str,
 ):
-    if selected_profile_key and selected_profile_key not in settings.profiles:
+    profiles, platform_profile_matrix = runtime_profile_matrix(settings)
+    if selected_profile_key and selected_profile_key not in profiles:
         raise SystemExit(f"Unknown profile key: {selected_profile_key}")
 
     expanded = []
     for platform_config in platform_configs:
         platform_config.content_type = content_type
-        platform_profiles = settings.rpa_platform_profiles.get(platform_config.name, {})
+        platform_profiles = platform_profile_matrix.get(platform_config.name, {})
         profile_keys = _selected_profile_keys(
             settings,
+            profiles,
             platform_profiles,
             selected_profile_key=selected_profile_key,
             all_profiles=all_profiles,
         )
         for profile_key in profile_keys:
-            profile = settings.profiles[profile_key]
+            profile = profiles[profile_key]
             profile_name = platform_profiles.get(profile_key, "")
             if not profile_name:
                 profile_name = settings.rpa_profile_names.get(platform_config.name, "")
@@ -292,6 +295,7 @@ def expand_platform_profiles(
 
 def _selected_profile_keys(
     settings: Settings,
+    profiles: dict[str, StreamingProfile],
     platform_profiles: dict[str, str],
     *,
     selected_profile_key: str | None,
@@ -300,9 +304,52 @@ def _selected_profile_keys(
     if selected_profile_key:
         return [selected_profile_key]
     if all_profiles:
-        keys = [key for key in settings.profiles if key in platform_profiles]
+        keys = [key for key in profiles if key in platform_profiles]
         return keys or [settings.default_profile_key]
     return [settings.default_profile_key]
+
+
+def runtime_profile_matrix(
+    settings: Settings,
+) -> tuple[dict[str, StreamingProfile], dict[str, dict[str, str]]]:
+    profiles = dict(settings.profiles)
+    platform_profiles = {
+        platform: dict(mapping)
+        for platform, mapping in settings.rpa_platform_profiles.items()
+    }
+    meta_profiles = load_runtime_meta_profiles()
+    if not meta_profiles:
+        return profiles, platform_profiles
+    for item in meta_profiles:
+        key = str(item.get("key", "")).strip()
+        label = str(item.get("label") or key).strip()
+        mapping = item.get("platforms")
+        if not key or not label or not isinstance(mapping, dict):
+            continue
+        profiles[key] = StreamingProfile(
+            key=key,
+            label=label,
+            technical_id=key,
+            is_junior=bool(item.get("is_junior", False)),
+        )
+        for platform, profile_name in mapping.items():
+            clean_name = str(profile_name).strip()
+            if clean_name:
+                platform_profiles.setdefault(str(platform), {})[key] = clean_name
+    return profiles, platform_profiles
+
+
+def load_runtime_meta_profiles() -> list[dict]:
+    for path in (Path(".continue/meta_profiles.json"), Path("config/profile_matrix.local.json")):
+        if not path.exists():
+            continue
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, dict)]
+    return []
 
 
 def ensure_chrome_cdp(

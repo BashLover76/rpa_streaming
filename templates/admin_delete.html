@@ -15,6 +15,7 @@
 
 {% if request.args.get('deleted') %}<p class="notice">Série supprimée. Sauvegarde : {{ request.args.get('backup') }}</p>{% endif %}
 {% if request.args.get('deleted_movie') %}<p class="notice">Film supprimé. Sauvegarde : {{ request.args.get('backup') }}</p>{% endif %}
+{% if request.args.get('deleted_data') %}<p class="notice">Données locales supprimées. Sauvegarde : {{ request.args.get('backup') }}</p>{% endif %}
 
 <section class="admin-section">
   <h2>Suppression série</h2>
@@ -61,5 +62,15 @@
     </article>
   {% else %}<p class="empty">Aucun film trouvé.</p>{% endfor %}
   </div>
+</section>
+
+<section class="admin-section danger-zone">
+  <h2>Delete Data</h2>
+  <p class="muted">Supprime toutes les séries, films, calendriers, historiques et données brutes locales après création d'une sauvegarde SQLite.</p>
+  <form method="post" action="{{ url_for('admin_delete_all_data') }}" onsubmit="return confirm('Supprimer toutes les données locales ? Cette action est irréversible hors restauration de sauvegarde.');">
+    <label for="confirm-delete-data">Écrire DELETE</label>
+    <input id="confirm-delete-data" name="confirmation" required pattern="DELETE" autocomplete="off">
+    <button class="danger" type="submit">Delete Data</button>
+  </form>
 </section>
 {% endblock %}

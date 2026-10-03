@@ -43,7 +43,7 @@ def run_job(job: dict[str, Any]) -> None:
     write_status({"current": job, "updated_at": now()})
     log_path = ROOT / job["log_path"]
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    command = build_rpa_command(job["platform"])
+    command = build_rpa_command(job)
     with log_path.open("ab") as log_file:
         log_file.write(
             f"{now()} | INFO | admin_rpa_worker | queued job started: {job['platform']}\n".encode()
@@ -63,12 +63,14 @@ def run_job(job: dict[str, Any]) -> None:
     write_status({"current": None, "last_completed": job, "updated_at": now()})
 
 
-def build_rpa_command(platform: str) -> list[str]:
+def build_rpa_command(job: dict[str, Any]) -> list[str]:
+    platform = str(job["platform"])
+    profile_key = str(job.get("profile_key") or "").strip()
     runner = os.getenv("ADMIN_RPA_RUNNER", "local").strip().casefold()
     if runner == "docker":
         compose_file = os.getenv("ADMIN_RPA_COMPOSE_FILE", "docker-compose.rpa.yml")
         service = os.getenv("ADMIN_RPA_DOCKER_SERVICE", "rpa-job")
-        return [
+        command = [
             "docker",
             "compose",
             "-f",
@@ -85,18 +87,20 @@ def build_rpa_command(platform: str) -> list[str]:
             os.getenv("ADMIN_RPA_CDP_URL", "http://127.0.0.1:9222"),
             "--rpa-mode",
             "differential",
-            "--all-profiles",
             "--skip-crunchyroll-api",
             "--no-auto-start-chrome",
         ]
+        if profile_key:
+            command.extend(["--profile-key", profile_key])
+        return command
     if runner == "command":
         template = os.getenv("ADMIN_RPA_COMMAND_TEMPLATE", "").strip()
         if not template:
             raise RuntimeError(
                 "ADMIN_RPA_COMMAND_TEMPLATE is required when ADMIN_RPA_RUNNER=command"
             )
-        return shlex.split(template.format(platform=platform))
-    return [
+        return shlex.split(template.format(platform=platform, profile_key=profile_key))
+    command = [
         sys.executable,
         "main_ingestion.py",
         "--platform",
@@ -105,10 +109,12 @@ def build_rpa_command(platform: str) -> list[str]:
         os.getenv("RPA_CDP_URL", "http://127.0.0.1:9222"),
         "--rpa-mode",
         "differential",
-        "--all-profiles",
         "--skip-crunchyroll-api",
         "--no-auto-start-chrome",
     ]
+    if profile_key:
+        command.extend(["--profile-key", profile_key])
+    return command
 
 
 def pop_job() -> dict[str, Any] | None:

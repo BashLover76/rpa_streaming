@@ -86,6 +86,8 @@ Fonctionnalités mobiles :
   plateformes sous une même lecture applicative.
 - bouton `Charger les profils` pour rafraîchir la matrice serveur sans attendre
   une synchro complète.
+- création d'un méta-profil depuis l'écran `Admin`, avec sélection des profils
+  disponibles par plateforme configurée.
 - détail d'un titre avec progression par profil lorsque le serveur expose
   l'historique multi-profil.
 - alerte de fraîcheur de synchro configurable; par défaut l'application signale
@@ -101,6 +103,10 @@ la synchro : elle est reportée dans le bloc `Debug synchro`.
 Quand un profil est sélectionné dans `Admin`, la prochaine synchronisation
 télécharge les séries, films et calendriers filtrés pour ce profil. Le choix est
 conservé dans les préférences locales de l'application.
+
+Les relances RPA depuis l'application mobile sont aussi ciblées sur ce profil
+actif. Le serveur place le job en file avec `--profile-key` et n'exécute pas les
+autres profils de la matrice.
 
 Pour rafraîchir les données, reconnecte le téléphone au réseau local du
 serveur local puis appuie à nouveau sur `Synchro`.
