@@ -194,6 +194,7 @@ def create_app() -> Flask:
     app.config["DEFAULT_PROFILE_KEY"] = settings.default_profile_key
     app.config["STREAMING_PLATFORM_PROFILES"] = settings.rpa_platform_profiles
     app.config["STREAMING_PLATFORMS"] = settings.streaming_platforms
+    StreamingDB(settings.db_path).init_schema()
 
     @app.teardown_appcontext
     def close_db(_error: BaseException | None = None) -> None:
@@ -446,13 +447,18 @@ def create_app() -> Flask:
     def admin_profiles_view():
         return render_template(
             "admin_profiles.html",
-            profiles=profile_options(),
             platform_profiles=platform_profile_options(),
             meta_profiles=read_meta_profiles(),
-            mobile_settings=read_mobile_settings(),
             platforms=fetch_admin_platforms(),
             has_meta_profiles=has_meta_profiles(),
             platform_labels=PLATFORM_LABELS,
+        )
+
+    @app.get("/admin/alerts")
+    def admin_alerts_view():
+        return render_template(
+            "admin_alerts.html",
+            mobile_settings=read_mobile_settings(),
         )
 
     @app.post("/admin/profiles/meta")
@@ -486,8 +492,11 @@ def create_app() -> Flask:
         settings["sync_alert_hours"] = clamp_int(
             request.form.get("sync_alert_hours"), default=24, minimum=1, maximum=720
         )
+        settings["sync_alert_enabled"] = request.form.get("sync_alert_enabled") == "1"
+        settings["episode_alert_enabled"] = request.form.get("episode_alert_enabled") == "1"
+        settings["hide_empty_calendar_days"] = request.form.get("hide_empty_calendar_days") == "1"
         write_json_file(MOBILE_SETTINGS_PATH, settings)
-        return redirect(url_for("admin_profiles_view", saved="1"))
+        return redirect(url_for("admin_alerts_view", saved="1"))
 
     @app.post("/admin/series/<int:series_id>/delete")
     def admin_delete_series(series_id: int):
@@ -546,7 +555,9 @@ def create_app() -> Flask:
         if platform not in known_platforms:
             abort(404)
         active_profile = resolve_profile()
-        job = enqueue_rpa_platform(platform, profile_key=active_profile["key"])
+        job = enqueue_rpa_platform(
+            platform, profile_key=active_profile["key"], source="web"
+        )
         return redirect(
             url_for(
                 "admin_rpa_view",
@@ -681,6 +692,7 @@ def create_app() -> Flask:
                 "mobile_settings": read_mobile_settings(),
                 "rpa_platforms": fetch_admin_platforms(),
                 "ingestion_statuses": fetch_mobile_ingestion_statuses(),
+                "recent_ingestions": fetch_recent_ingestion_runs(limit_per_platform=5),
             }
         )
 
@@ -706,6 +718,12 @@ def create_app() -> Flask:
             1,
             720,
         )
+        if "sync_alert_enabled" in payload:
+            settings["sync_alert_enabled"] = bool(payload.get("sync_alert_enabled"))
+        if "episode_alert_enabled" in payload:
+            settings["episode_alert_enabled"] = bool(payload.get("episode_alert_enabled"))
+        if "hide_empty_calendar_days" in payload:
+            settings["hide_empty_calendar_days"] = bool(payload.get("hide_empty_calendar_days"))
         write_json_file(MOBILE_SETTINGS_PATH, settings)
         return jsonify({"mobile_settings": settings})
 
@@ -749,7 +767,9 @@ def create_app() -> Flask:
         if platform not in known_platforms:
             abort(404)
         active_profile = resolve_profile()
-        job = enqueue_rpa_platform(platform, profile_key=active_profile["key"])
+        job = enqueue_rpa_platform(
+            platform, profile_key=active_profile["key"], source="mobile"
+        )
         return jsonify(
             {
                 "status": "queued",
@@ -766,14 +786,17 @@ def create_app() -> Flask:
         platform = request.args.get("platform", "").strip()
         genre = request.args.get("genre", "").strip()
         active_profile = resolve_profile()
+        include_all_profiles = request.args.get("profile") == "all"
+        profile_key = None if include_all_profiles else active_profile["key"]
+        junior_only = False if include_all_profiles else active_profile["is_junior"]
         page, per_page = parse_pagination_args(default_per_page=20, max_per_page=100)
         if content_type in {"movie", "movies", "film", "films"}:
             total = count_movies(
                 query,
                 platform,
                 genre,
-                profile_key=active_profile["key"],
-                junior_only=active_profile["is_junior"],
+                profile_key=profile_key,
+                junior_only=junior_only,
             )
             items = [
                 mobile_title_summary(item, content_type="movie")
@@ -781,8 +804,8 @@ def create_app() -> Flask:
                     query=query,
                     platform=platform,
                     genre=genre,
-                    profile_key=active_profile["key"],
-                    junior_only=active_profile["is_junior"],
+                    profile_key=profile_key,
+                    junior_only=junior_only,
                     limit=per_page,
                     offset=(page - 1) * per_page,
                 )
@@ -793,8 +816,8 @@ def create_app() -> Flask:
                 query,
                 platform,
                 genre,
-                profile_key=active_profile["key"],
-                junior_only=active_profile["is_junior"],
+                profile_key=profile_key,
+                junior_only=junior_only,
             )
             items = [
                 mobile_title_summary(item, content_type="series")
@@ -802,8 +825,8 @@ def create_app() -> Flask:
                     query=query,
                     platform=platform,
                     genre=genre,
-                    profile_key=active_profile["key"],
-                    junior_only=active_profile["is_junior"],
+                    profile_key=profile_key,
+                    junior_only=junior_only,
                     limit=per_page,
                     offset=(page - 1) * per_page,
                 )
@@ -817,7 +840,7 @@ def create_app() -> Flask:
                 "per_page": per_page,
                 "total": total,
                 "total_pages": max(1, (total + per_page - 1) // per_page),
-                "profile": active_profile,
+                "profile": "all" if include_all_profiles else active_profile,
             }
         )
 
@@ -855,6 +878,7 @@ def create_app() -> Flask:
         watched_filter = request.args.get("watched", "all")
         platforms = request.args.getlist("platform")
         active_profile = resolve_profile()
+        include_all_profiles = request.args.get("profile") == "all"
         episodes = fetch_upcoming_releases(
             selected_month,
             date.today(),
@@ -862,8 +886,8 @@ def create_app() -> Flask:
             watched_filter=watched_filter,
             query=query,
             genre=genre,
-            profile_key=active_profile["key"],
-            junior_only=active_profile["is_junior"],
+            profile_key=None if include_all_profiles else active_profile["key"],
+            junior_only=False if include_all_profiles else active_profile["is_junior"],
         )
         return jsonify(
             {
@@ -1019,7 +1043,12 @@ def read_meta_profiles() -> list[dict[str, Any]]:
 def read_mobile_settings() -> dict[str, Any]:
     value = read_json_file(MOBILE_SETTINGS_PATH, {})
     settings = value if isinstance(value, dict) else {}
-    return {"sync_alert_hours": clamp_int(settings.get("sync_alert_hours"), 24, 1, 720)}
+    return {
+        "sync_alert_hours": clamp_int(settings.get("sync_alert_hours"), 24, 1, 720),
+        "sync_alert_enabled": bool(settings.get("sync_alert_enabled", True)),
+        "episode_alert_enabled": bool(settings.get("episode_alert_enabled", False)),
+        "hide_empty_calendar_days": bool(settings.get("hide_empty_calendar_days", False)),
+    }
 
 
 def read_json_file(path: Path, default: Any) -> Any:
@@ -1334,12 +1363,15 @@ MOBILE_SETTINGS_PATH = STATE_DIR / "mobile_settings.json"
 DISCOVERED_PLATFORM_PROFILES_PATH = STATE_DIR / "platform_profiles_discovered.json"
 
 
-def enqueue_rpa_platform(platform: str, *, profile_key: str | None = None) -> dict[str, Any]:
+def enqueue_rpa_platform(
+    platform: str, *, profile_key: str | None = None, source: str = "web"
+) -> dict[str, Any]:
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     job = {
         "id": uuid.uuid4().hex,
         "platform": platform,
         "profile_key": profile_key,
+        "source": source,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "log_path": str(Path("logs") / f"admin-rpa-{platform}-{timestamp}.log"),
     }
@@ -1423,6 +1455,44 @@ def fetch_admin_rpa_logs(limit: int = 3) -> list[dict[str, Any]]:
 
 
 def fetch_mobile_ingestion_statuses() -> list[dict[str, Any]]:
+    rows = get_db().execute(
+        """
+        SELECT *
+        FROM ingestion_runs
+        WHERE id IN (
+            SELECT MAX(id)
+            FROM ingestion_runs
+            WHERE platform IS NOT NULL
+            GROUP BY platform
+        )
+        ORDER BY platform
+        """
+    ).fetchall()
+    if rows:
+        statuses = {
+            row["platform"]: ingestion_run_status(dict(row))
+            for row in rows
+            if row["platform"]
+        }
+        for item in fetch_admin_platforms():
+            platform = item["platform"]
+            statuses.setdefault(
+                platform,
+                {
+                    "platform": platform,
+                    "platform_label": item.get("label") or PLATFORM_LABELS.get(platform, platform),
+                    "status": "unknown",
+                    "inserted": 0,
+                    "error": "",
+                    "updated_at": "",
+                    "started_at": "",
+                    "finished_at": "",
+                    "duration_seconds": None,
+                    "loaded_items_by_profile": {},
+                },
+            )
+        return sorted(statuses.values(), key=lambda item: item["platform_label"])
+
     statuses: dict[str, dict[str, Any]] = {}
     catalog_summary: dict[str, Any] | None = None
     for timestamp, line in iter_ingestion_log_lines():
@@ -1534,6 +1604,64 @@ def fetch_mobile_ingestion_statuses() -> list[dict[str, Any]]:
     return items
 
 
+def ingestion_run_status(row: dict[str, Any]) -> dict[str, Any]:
+    platform = row.get("platform") or "unknown"
+    seconds = float(row.get("duration_seconds") or 0)
+    return {
+        "id": row.get("id"),
+        "platform": platform,
+        "platform_label": PLATFORM_LABELS.get(platform, platform),
+        "profile_key": row.get("profile_key"),
+        "source": row.get("source") or "manuel",
+        "mode": row.get("mode"),
+        "status": row.get("status") or "unknown",
+        "inserted": int(row.get("loaded_items") or 0),
+        "error": row.get("error") or "",
+        "updated_at": row.get("finished_at") or row.get("started_at") or "",
+        "started_at": row.get("started_at") or "",
+        "finished_at": row.get("finished_at") or "",
+        "duration_seconds": seconds,
+        "duration": format_duration(seconds),
+        "loaded_items_by_profile": parse_json_object(row.get("loaded_items_by_profile")),
+    }
+
+
+def fetch_recent_ingestion_runs(limit_per_platform: int = 5) -> dict[str, list[dict[str, Any]]]:
+    rows = get_db().execute(
+        """
+        SELECT *
+        FROM (
+            SELECT
+                ingestion_runs.*,
+                ROW_NUMBER() OVER (
+                    PARTITION BY platform
+                    ORDER BY datetime(started_at) DESC, id DESC
+                ) AS run_rank
+            FROM ingestion_runs
+            WHERE platform IS NOT NULL
+        )
+        WHERE run_rank <= ?
+        ORDER BY platform, datetime(started_at) DESC, id DESC
+        """,
+        (limit_per_platform,),
+    ).fetchall()
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        item = ingestion_run_status(dict(row))
+        grouped.setdefault(item["platform"], []).append(item)
+    return grouped
+
+
+def parse_json_object(raw_value: Any) -> dict[str, Any]:
+    if not raw_value:
+        return {}
+    try:
+        value = json.loads(raw_value)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 def _platform_from_admin_log_line(line: str) -> str | None:
     for platform in PLATFORM_LABELS:
         if platform in line:
@@ -1623,7 +1751,8 @@ def fetch_admin_kpis(selected_platform: str | None = None) -> dict[str, Any]:
                  AND datetime(updated_at) >= datetime(?)""",
             (last_start.strftime("%Y-%m-%d %H:%M:%S"),),
         ).fetchone()[0]
-    durations = ingestion_durations_by_platform()
+    recent_ingestions = fetch_recent_ingestion_runs(limit_per_platform=5)
+    durations = latest_ingestion_durations_from_db(recent_ingestions)
     max_seconds = max([item["seconds"] for item in durations] or [1])
     for item in durations:
         item["percent"] = round((item["seconds"] / max_seconds) * 100, 1)
@@ -1638,6 +1767,7 @@ def fetch_admin_kpis(selected_platform: str | None = None) -> dict[str, Any]:
             last_start.strftime("%Y-%m-%d %H:%M:%S") if last_start else None
         ),
         "durations": durations,
+        "recent_ingestions": recent_ingestions,
         "selected_platform": selected_platform,
         "selected_platform_titles": fetch_recent_titles_for_platform(
             selected_platform, last_start
@@ -1645,6 +1775,28 @@ def fetch_admin_kpis(selected_platform: str | None = None) -> dict[str, Any]:
         if selected_platform
         else [],
     }
+
+
+def latest_ingestion_durations_from_db(
+    recent_ingestions: dict[str, list[dict[str, Any]]]
+) -> list[dict[str, Any]]:
+    durations = []
+    for platform, runs in recent_ingestions.items():
+        if not runs:
+            continue
+        latest = runs[0]
+        seconds = float(latest.get("duration_seconds") or 0)
+        durations.append(
+            {
+                "platform": platform,
+                "label": PLATFORM_LABELS.get(platform, platform),
+                "seconds": round(seconds, 1),
+                "duration": latest.get("duration") or format_duration(seconds),
+                "status": "failed" if latest.get("status") == "ko" else "ok",
+                "inserted": int(latest.get("inserted") or 0),
+            }
+        )
+    return sorted(durations, key=lambda item: item["seconds"], reverse=True)
 
 
 def fetch_recent_titles_for_platform(
@@ -1693,6 +1845,14 @@ def fetch_recent_titles_for_platform(
 
 
 def latest_ingestion_start() -> datetime | None:
+    row = get_db().execute(
+        "SELECT started_at FROM ingestion_runs ORDER BY datetime(started_at) DESC, id DESC LIMIT 1"
+    ).fetchone()
+    if row and row["started_at"]:
+        try:
+            return datetime.strptime(row["started_at"], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            pass
     starts = [
         timestamp
         for timestamp, line in iter_ingestion_log_lines()

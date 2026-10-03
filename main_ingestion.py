@@ -112,6 +112,12 @@ def parse_args() -> argparse.Namespace:
         help="Prevent concurrent ingestion runs with a filesystem lock.",
     )
     parser.add_argument("--no-lock", action="store_true")
+    parser.add_argument(
+        "--ingestion-source",
+        choices=("manual", "manuel", "web", "mobile"),
+        default="manuel",
+        help="Source recorded in the ingestion tracking table.",
+    )
     return parser.parse_args()
 
 
@@ -152,107 +158,136 @@ def run(args: argparse.Namespace) -> None:
         logging.warning(
             "--content-type is deprecated: collecting all history; IMDb determines the type."
         )
+    run_id = db.start_ingestion_run(
+        platform=args.platform,
+        profile_key=args.profile_key,
+        source="manuel" if args.ingestion_source == "manual" else args.ingestion_source,
+        mode=args.rpa_mode,
+    )
+    loaded_by_profile: dict[str, int] = {}
+    rpa_results: dict[str, int] = {}
 
-    beta = None
-    if not args.skip_betaseries:
-        beta = build_betaseries_client(settings, db)
+    try:
+        beta = None
+        if not args.skip_betaseries:
+            beta = build_betaseries_client(settings, db)
 
-    if (
-        not args.skip_crunchyroll_api
-        and settings.crunchyroll_email
-        and args.platform in (None, "crunchyroll")
-    ):
-        try:
-            crunchyroll = CrunchyrollClient(
-                credentials=CrunchyrollCredentials(
-                    email=settings.crunchyroll_email,
-                    password=settings.crunchyroll_password,
-                    authorization=settings.crunchyroll_authorization or None,
-                    profile_id=settings.crunchyroll_profile_id or None,
-                    locale=settings.crunchyroll_locale,
-                ),
-                db=collector_db,
+        if (
+            not args.skip_crunchyroll_api
+            and settings.crunchyroll_email
+            and args.platform in (None, "crunchyroll")
+        ):
+            try:
+                crunchyroll = CrunchyrollClient(
+                    credentials=CrunchyrollCredentials(
+                        email=settings.crunchyroll_email,
+                        password=settings.crunchyroll_password,
+                        authorization=settings.crunchyroll_authorization or None,
+                        profile_id=settings.crunchyroll_profile_id or None,
+                        locale=settings.crunchyroll_locale,
+                    ),
+                    db=collector_db,
+                )
+                if not args.skip_crunchyroll_history:
+                    crunchyroll.sync_history()
+                time.sleep(args.pause_seconds)
+            except RuntimeError as exc:
+                logging.getLogger(__name__).warning("Crunchyroll API skipped: %s", exc)
+
+        if not args.skip_rpa:
+            ollama = OllamaClient(
+                base_url=settings.ollama_base_url,
+                model=settings.ollama_model,
+                num_ctx=settings.ollama_num_ctx,
+                num_predict=settings.ollama_num_predict,
+                timeout=settings.ollama_timeout,
             )
-            if not args.skip_crunchyroll_history:
-                crunchyroll.sync_history()
-            time.sleep(args.pause_seconds)
-        except RuntimeError as exc:
-            logging.getLogger(__name__).warning("Crunchyroll API skipped: %s", exc)
-
-    if not args.skip_rpa:
-        ollama = OllamaClient(
-            base_url=settings.ollama_base_url,
-            model=settings.ollama_model,
-            num_ctx=settings.ollama_num_ctx,
-            num_predict=settings.ollama_num_predict,
-            timeout=settings.ollama_timeout,
-        )
-        platform_configs = load_platform_configs(settings.platform_config_path)
-        platform_configs = [
-            platform_config
-            for platform_config in platform_configs
-            if settings.streaming_platforms.get(platform_config.name, True)
-        ]
-        if args.platform:
+            platform_configs = load_platform_configs(settings.platform_config_path)
             platform_configs = [
                 platform_config
                 for platform_config in platform_configs
-                if platform_config.name == args.platform
+                if settings.streaming_platforms.get(platform_config.name, True)
             ]
-            if not platform_configs:
-                raise SystemExit(f"Unknown platform: {args.platform}")
-        platform_configs = expand_platform_profiles(
-            platform_configs,
-            settings,
-            selected_profile_key=args.profile_key,
-            all_profiles=args.all_profiles,
-            content_type=args.content_type,
-        )
-        cdp_url = args.cdp_url or settings.rpa_cdp_url or None
-        cdp_timeout_ms = args.cdp_timeout_ms or settings.rpa_cdp_timeout_ms
-        if cdp_url and not args.no_auto_start_chrome:
-            ensure_chrome_cdp(
-                cdp_url,
-                timeout_ms=cdp_timeout_ms,
-                extension_path=settings.rpa_browser_extension_path,
-                force_restart=args.force_restart_chrome,
+            if args.platform:
+                platform_configs = [
+                    platform_config
+                    for platform_config in platform_configs
+                    if platform_config.name == args.platform
+                ]
+                if not platform_configs:
+                    raise SystemExit(f"Unknown platform: {args.platform}")
+            platform_configs = expand_platform_profiles(
+                platform_configs,
+                settings,
+                selected_profile_key=args.profile_key,
+                all_profiles=args.all_profiles,
+                content_type=args.content_type,
             )
-        rpa = SelfHealingRPA(
-            db=collector_db,
-            ollama=ollama,
-            user_data_dir=settings.rpa_user_data_dir,
-            headless=args.headless,
-            browser_extension_path=settings.rpa_browser_extension_path,
-            cdp_url=cdp_url,
-            cdp_timeout_ms=cdp_timeout_ms,
-            rpa_mode=args.rpa_mode,
-            differential_known_threshold=args.rpa_differential_known_threshold,
-            credentials=settings.rpa_credentials,
-            storage_state_path=settings.rpa_storage_state_path,
-        )
-        rpa.run_platforms(platform_configs)
+            cdp_url = args.cdp_url or settings.rpa_cdp_url or None
+            cdp_timeout_ms = args.cdp_timeout_ms or settings.rpa_cdp_timeout_ms
+            if cdp_url and not args.no_auto_start_chrome:
+                ensure_chrome_cdp(
+                    cdp_url,
+                    timeout_ms=cdp_timeout_ms,
+                    extension_path=settings.rpa_browser_extension_path,
+                    force_restart=args.force_restart_chrome,
+                )
+            rpa = SelfHealingRPA(
+                db=collector_db,
+                ollama=ollama,
+                user_data_dir=settings.rpa_user_data_dir,
+                headless=args.headless,
+                browser_extension_path=settings.rpa_browser_extension_path,
+                cdp_url=cdp_url,
+                cdp_timeout_ms=cdp_timeout_ms,
+                rpa_mode=args.rpa_mode,
+                differential_known_threshold=args.rpa_differential_known_threshold,
+                credentials=settings.rpa_credentials,
+                storage_state_path=settings.rpa_storage_state_path,
+            )
+            rpa_results = rpa.run_platforms(platform_configs)
+            for platform_config in platform_configs:
+                loaded_by_profile[platform_config.profile_key or default_profile.key] = (
+                    loaded_by_profile.get(platform_config.profile_key or default_profile.key, 0)
+                    + int(rpa_results.get(platform_config.name, 0) or 0)
+                )
 
-    if not args.skip_resolution:
-        with httpx.Client(timeout=30.0) as client:
-            pipeline = CatalogPipeline(db, TitleResolver(IMDbClient(client), beta))
-            logging.info(
-                "Existing catalog: %s",
-                pipeline.reconcile_existing(
-                    platform=args.platform,
-                    only_unverified=not args.reconcile_existing,
-                ),
-            )
-            pipeline.run(platform=args.platform, retry=args.retry_unresolved)
-    if beta:
-        try:
-            beta.sync_calendar(
-                days_before=args.betaseries_days_before,
-                days_after=args.betaseries_days_after,
-            )
-        except (httpx.HTTPError, RuntimeError) as exc:
-            logging.getLogger(__name__).warning(
-                "BetaSeries calendar skipped after ingestion: %s", exc
-            )
+        if not args.skip_resolution:
+            with httpx.Client(timeout=30.0) as client:
+                pipeline = CatalogPipeline(db, TitleResolver(IMDbClient(client), beta))
+                logging.info(
+                    "Existing catalog: %s",
+                    pipeline.reconcile_existing(
+                        platform=args.platform,
+                        only_unverified=not args.reconcile_existing,
+                    ),
+                )
+                pipeline.run(platform=args.platform, retry=args.retry_unresolved)
+        if beta:
+            try:
+                beta.sync_calendar(
+                    days_before=args.betaseries_days_before,
+                    days_after=args.betaseries_days_after,
+                )
+            except (httpx.HTTPError, RuntimeError) as exc:
+                logging.getLogger(__name__).warning(
+                    "BetaSeries calendar skipped after ingestion: %s", exc
+                )
+        db.finish_ingestion_run(
+            run_id,
+            status="ok",
+            loaded_items=sum(int(value or 0) for value in rpa_results.values()),
+            loaded_items_by_profile=loaded_by_profile,
+        )
+    except Exception as exc:
+        db.finish_ingestion_run(
+            run_id,
+            status="ko",
+            loaded_items=sum(int(value or 0) for value in rpa_results.values()),
+            loaded_items_by_profile=loaded_by_profile,
+            error=str(exc),
+        )
+        raise
 
 
 def expand_platform_profiles(

@@ -140,6 +140,21 @@ class StreamingDB:
                     payload TEXT NOT NULL,
                     collected_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
+                CREATE TABLE IF NOT EXISTS ingestion_runs (
+                    id INTEGER PRIMARY KEY,
+                    platform TEXT,
+                    profile_key TEXT,
+                    source TEXT NOT NULL DEFAULT 'manual',
+                    mode TEXT,
+                    status TEXT NOT NULL DEFAULT 'running',
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT,
+                    duration_seconds REAL,
+                    loaded_items INTEGER NOT NULL DEFAULT 0,
+                    loaded_items_by_profile TEXT NOT NULL DEFAULT '{}',
+                    error TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
                 """)
             self._ensure_series_columns(conn)
             self._ensure_calendar_columns(conn)
@@ -155,6 +170,12 @@ class StreamingDB:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS series_profile_junior ON series(profile_key, suitable_for_junior)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS ingestion_runs_recent ON ingestion_runs(platform, started_at DESC)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS ingestion_runs_profile ON ingestion_runs(profile_key, started_at DESC)"
             )
 
     @staticmethod
@@ -662,6 +683,60 @@ class StreamingDB:
             except sqlite3.IntegrityError:
                 return False
             return cursor.rowcount > 0
+
+    def start_ingestion_run(
+        self,
+        *,
+        platform: str | None,
+        profile_key: str | None,
+        source: str,
+        mode: str | None,
+    ) -> int:
+        with self.connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO ingestion_runs (
+                    platform, profile_key, source, mode, status, started_at
+                )
+                VALUES (?, ?, ?, ?, 'running', CURRENT_TIMESTAMP)
+                """,
+                (platform, profile_key, source, mode),
+            )
+            return int(cursor.lastrowid)
+
+    def finish_ingestion_run(
+        self,
+        run_id: int,
+        *,
+        status: str,
+        loaded_items: int = 0,
+        loaded_items_by_profile: dict[str, int] | None = None,
+        error: str | None = None,
+    ) -> None:
+        loaded_items_by_profile = loaded_items_by_profile or {}
+        with self.connect() as conn:
+            conn.execute(
+                """
+                UPDATE ingestion_runs
+                SET
+                    status = ?,
+                    finished_at = CURRENT_TIMESTAMP,
+                    duration_seconds = (
+                        julianday(CURRENT_TIMESTAMP) - julianday(started_at)
+                    ) * 86400.0,
+                    loaded_items = ?,
+                    loaded_items_by_profile = ?,
+                    error = ?
+                WHERE id = ?
+                """,
+                (
+                    status,
+                    loaded_items,
+                    json.dumps(loaded_items_by_profile, ensure_ascii=False),
+                    error,
+                    run_id,
+                ),
+            )
 
     def _with_default_profile(self, item: dict[str, Any]) -> dict[str, Any]:
         if item.get("profile_key") and "suitable_for_junior" in item:

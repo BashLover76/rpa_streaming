@@ -11,6 +11,7 @@
   <a href="{{ url_for('admin_logs_view') }}">Logs</a>
   <a aria-current="page" href="{{ url_for('admin_kpis_view') }}">KPIs</a>
   <a href="{{ url_for('admin_profiles_view') }}">Profils</a>
+  <a href="{{ url_for('admin_alerts_view') }}">Alertes</a>
 </nav>
 
 <section class="kpi-grid">
@@ -31,6 +32,43 @@
     <strong>{{ kpis.added_series + kpis.added_movies }}</strong>
     <small>{{ kpis.added_series }} séries · {{ kpis.added_movies }} films</small>
   </article>
+</section>
+
+<section class="admin-section">
+  <h2>5 dernières ingestions par plateforme</h2>
+  <div class="platform-grid">
+    {% for platform, runs in kpis.recent_ingestions.items() %}
+      <article class="kpi-card ingestion-run-card">
+        <span class="platform-label"><b class="platform-mark platform-{{ platform }}">{{ platform_labels.get(platform, platform) }}</b></span>
+        <div class="admin-list compact-list">
+        {% for run in runs %}
+          <div class="admin-row">
+            <div>
+              <strong>{{ run.started_at }}</strong>
+              <span>{{ run.source }} · {{ run.mode or "n/a" }} · {{ run.duration }}</span>
+              {% if run.loaded_items_by_profile %}
+                <span>
+                {% for profile, count in run.loaded_items_by_profile.items() %}
+                  {{ profile }}: {{ count }}{% if not loop.last %} · {% endif %}
+                {% endfor %}
+                </span>
+              {% endif %}
+              {% if run.error %}<span class="error-text">{{ run.error }}</span>{% endif %}
+            </div>
+            <div class="row-meta">
+              <span class="status-dot {{ 'ok' if run.status == 'ok' else 'ko' }}">{{ run.status|upper }}</span>
+              <span>+{{ run.inserted }}</span>
+            </div>
+          </div>
+        {% else %}
+          <p class="empty">Aucune ingestion suivie.</p>
+        {% endfor %}
+        </div>
+      </article>
+    {% else %}
+      <p class="empty">Aucune ingestion suivie en base.</p>
+    {% endfor %}
+  </div>
 </section>
 
 <section class="admin-section">

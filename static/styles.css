@@ -615,6 +615,46 @@ article {
   color: var(--muted);
 }
 
+.compact-list {
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.ingestion-run-card {
+  align-content: start;
+}
+
+.status-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.status-dot.ok {
+  color: #063b24;
+  background: #62d69b;
+}
+
+.status-dot.ko {
+  color: #4a070b;
+  background: #ff8a94;
+}
+
+.error-text {
+  color: #ff9aa2;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 @media (max-width: 820px) {
   .detail-layout { display: block; }
   .detail-column + .detail-column { margin-top: 18px; }

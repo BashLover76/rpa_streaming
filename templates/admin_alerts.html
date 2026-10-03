@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Admin - alertes{% endblock %}
+{% block content %}
+<section class="admin-heading">
+  <div><p class="eyebrow">Administration locale</p><h1>Alertes</h1></div>
+  <p class="muted">Notifications mobile et options calendrier.</p>
+</section>
+<nav class="admin-tabs">
+  <a href="{{ url_for('admin_delete_view') }}">Suppressions</a>
+  <a href="{{ url_for('admin_rpa_view') }}">Relance RPA</a>
+  <a href="{{ url_for('admin_logs_view') }}">Logs</a>
+  <a href="{{ url_for('admin_kpis_view') }}">KPIs</a>
+  <a href="{{ url_for('admin_profiles_view') }}">Profils</a>
+  <a aria-current="page" href="{{ url_for('admin_alerts_view') }}">Alertes</a>
+</nav>
+
+{% if request.args.get('saved') %}<p class="notice">Configuration enregistrée.</p>{% endif %}
+
+<section class="admin-section">
+  <h2>Alertes mobile</h2>
+  <form class="admin-profile-form" method="post" action="{{ url_for('admin_update_mobile_settings') }}">
+    <label class="check-row">
+      <input type="checkbox" name="sync_alert_enabled" value="1" {% if mobile_settings.sync_alert_enabled %}checked{% endif %}>
+      Activer l'alerte de retard de synchronisation
+    </label>
+    <label>Notifier si la dernière synchro mobile dépasse X heures
+      <input type="number" min="1" max="720" name="sync_alert_hours" value="{{ mobile_settings.sync_alert_hours }}">
+    </label>
+    <label class="check-row">
+      <input type="checkbox" name="episode_alert_enabled" value="1" {% if mobile_settings.episode_alert_enabled %}checked{% endif %}>
+      Activer l'alerte de disponibilité d'un nouvel épisode
+    </label>
+    <label class="check-row">
+      <input type="checkbox" name="hide_empty_calendar_days" value="1" {% if mobile_settings.hide_empty_calendar_days %}checked{% endif %}>
+      Masquer les jours vides dans le calendrier mobile
+    </label>
+    <button type="submit">Enregistrer</button>
+  </form>
+</section>
+{% endblock %}

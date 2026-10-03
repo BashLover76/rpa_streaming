@@ -18,6 +18,7 @@ import android.text.method.DigitsKeyListener;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
@@ -75,6 +76,9 @@ public class MainActivity extends Activity {
     private EditText gridColumnsInput;
     private EditText maxRowsInput;
     private EditText syncAlertHoursInput;
+    private CheckBox syncAlertEnabledInput;
+    private CheckBox episodeAlertEnabledInput;
+    private CheckBox hideEmptyCalendarDaysInput;
     private Screen currentScreen = Screen.titles("series", 0);
     private YearMonth calendarMonth = YearMonth.now();
     private int colorBg;
@@ -254,7 +258,9 @@ public class MainActivity extends Activity {
         if (items == null) return result;
         for (int index = 0; index < items.length(); index++) {
             JSONObject item = items.optJSONObject(index);
-            if (item != null && titleMatches(item, query)) result.add(item);
+            if (item != null && profileMatches(item) && titleMatches(item, query)) {
+                result.add(item);
+            }
         }
         return result;
     }
@@ -504,6 +510,7 @@ public class MainActivity extends Activity {
         content.addView(nav);
 
         JSONArray episodes = payload.optJSONArray("episodes");
+        boolean hideEmptyDays = prefs.getBoolean("hide_empty_calendar_days", false);
         for (int day = 1; day <= calendarMonth.lengthOfMonth(); day++) {
             LocalDate date = calendarMonth.atDay(day);
             LinearLayout dayCard = card();
@@ -521,7 +528,7 @@ public class MainActivity extends Activity {
                     count++;
                 }
             }
-            if (count > 0 || currentQuery().isEmpty()) {
+            if (count > 0 || (currentQuery().isEmpty() && !hideEmptyDays)) {
                 if (count == 0) dayCard.addView(line("Aucune sortie connue"));
                 if (count > 0) {
                     carousel.addView(carouselRow);
@@ -533,6 +540,7 @@ public class MainActivity extends Activity {
     }
 
     private void renderAdmin() {
+        addSection(tr("general"));
         addSection(tr("server_connection"));
         serverInput = new EditText(this);
         serverInput.setText(prefs.getString("server_url", "http://192.168.1.170:5000"));
@@ -548,21 +556,24 @@ public class MainActivity extends Activity {
         syncStatus = line(lastSyncLabel());
         content.addView(syncStatus);
         addLanguageSettings();
+        addAdminSettings();
+        addSection(tr("profile"));
         addProfileSettings();
         addCreateMetaProfileSettings();
         addMetaProfileSettings();
         addPlatformProfileSettings();
-        addSyncAlertSettings();
-        addAdminSettings();
+        addSection(tr("rpa_restart"));
+        addRpaControls();
+        addSection(tr("offline_kpis"));
         addAdminKpis();
         addIngestionStatuses();
-        addRpaControls();
+        addSection(tr("alerts"));
+        addSyncAlertSettings();
         addDebugLog();
         addMessage(tr("app_version") + ": " + APP_VERSION);
     }
 
     private void addAdminSettings() {
-        addSection(tr("display"));
         LinearLayout settings = card();
         settings.addView(line(tr("display_help")));
         gridColumnsInput = numberInput(String.valueOf(gridColumns()), tr("columns_hint"));
@@ -582,7 +593,6 @@ public class MainActivity extends Activity {
     }
 
     private void addLanguageSettings() {
-        addSection(tr("language"));
         LinearLayout row = card();
         row.setOrientation(LinearLayout.HORIZONTAL);
         addLanguageButton(row, "fr", "🇫🇷");
@@ -605,11 +615,25 @@ public class MainActivity extends Activity {
     }
 
     private void addSyncAlertSettings() {
-        addSection(tr("sync_alert"));
         LinearLayout panel = card();
         panel.addView(line(tr("sync_alert_help")));
+        syncAlertEnabledInput = new CheckBox(this);
+        syncAlertEnabledInput.setText(tr("sync_alert_enabled"));
+        syncAlertEnabledInput.setTextColor(colorText);
+        syncAlertEnabledInput.setChecked(prefs.getBoolean("sync_alert_enabled", true));
+        panel.addView(syncAlertEnabledInput);
         syncAlertHoursInput = numberInput(String.valueOf(syncAlertHours()), tr("hours"));
         panel.addView(syncAlertHoursInput);
+        episodeAlertEnabledInput = new CheckBox(this);
+        episodeAlertEnabledInput.setText(tr("episode_alert_enabled"));
+        episodeAlertEnabledInput.setTextColor(colorText);
+        episodeAlertEnabledInput.setChecked(prefs.getBoolean("episode_alert_enabled", false));
+        panel.addView(episodeAlertEnabledInput);
+        hideEmptyCalendarDaysInput = new CheckBox(this);
+        hideEmptyCalendarDaysInput.setText(tr("hide_empty_calendar_days"));
+        hideEmptyCalendarDaysInput.setTextColor(colorText);
+        hideEmptyCalendarDaysInput.setChecked(prefs.getBoolean("hide_empty_calendar_days", false));
+        panel.addView(hideEmptyCalendarDaysInput);
         Button save = button(tr("save"), false);
         save.setOnClickListener(v -> saveSyncAlertSettings());
         panel.addView(save);
@@ -618,11 +642,23 @@ public class MainActivity extends Activity {
 
     private void saveSyncAlertSettings() {
         int hours = clamp(parseInt(syncAlertHoursInput.getText().toString(), 24), 1, 720);
-        prefs.edit().putInt("sync_alert_hours", hours).apply();
+        boolean syncEnabled = syncAlertEnabledInput == null || syncAlertEnabledInput.isChecked();
+        boolean episodeEnabled = episodeAlertEnabledInput != null && episodeAlertEnabledInput.isChecked();
+        boolean hideEmptyDays = hideEmptyCalendarDaysInput != null && hideEmptyCalendarDaysInput.isChecked();
+        prefs.edit()
+                .putInt("sync_alert_hours", hours)
+                .putBoolean("sync_alert_enabled", syncEnabled)
+                .putBoolean("episode_alert_enabled", episodeEnabled)
+                .putBoolean("hide_empty_calendar_days", hideEmptyDays)
+                .apply();
         progress.setVisibility(ProgressBar.VISIBLE);
         executor.submit(() -> {
             try {
-                JSONObject payload = new JSONObject().put("sync_alert_hours", hours);
+                JSONObject payload = new JSONObject()
+                        .put("sync_alert_hours", hours)
+                        .put("sync_alert_enabled", syncEnabled)
+                        .put("episode_alert_enabled", episodeEnabled)
+                        .put("hide_empty_calendar_days", hideEmptyDays);
                 JSONObject response = postJsonSync("/api/mobile/settings", payload);
                 JSONObject bootstrap = cachedJson("bootstrap");
                 if (bootstrap != null) {
@@ -645,7 +681,6 @@ public class MainActivity extends Activity {
     }
 
     private void addProfileSettings() {
-        addSection(tr("profile"));
         LinearLayout row = card();
         row.setOrientation(LinearLayout.VERTICAL);
         JSONObject bootstrap = cachedJson("bootstrap");
@@ -724,7 +759,7 @@ public class MainActivity extends Activity {
                 if (profiles == null || profiles.length() == 0) continue;
                 panel.addView(titleText(platformLabel(platform), 15));
                 List<String> values = new ArrayList<>();
-                values.add("");
+                values.add(tr("ignore_platform"));
                 for (int index = 0; index < profiles.length(); index++) {
                     JSONObject profile = profiles.optJSONObject(index);
                     if (profile == null) continue;
@@ -758,6 +793,7 @@ public class MainActivity extends Activity {
                 for (Map.Entry<String, Spinner> entry : selectors.entrySet()) {
                     Object selected = entry.getValue().getSelectedItem();
                     String profileName = selected == null ? "" : selected.toString().trim();
+                    if (profileName.equals(tr("ignore_platform"))) profileName = "";
                     if (!profileName.isEmpty()) platforms.put(entry.getKey(), profileName);
                 }
                 JSONObject payload = new JSONObject()
@@ -826,7 +862,6 @@ public class MainActivity extends Activity {
     }
 
     private void addAdminKpis() {
-        addSection(tr("offline_kpis"));
         JSONObject series = cachedJson(cacheKeyForTitles("series"));
         JSONObject movies = cachedJson(cacheKeyForTitles("movie"));
         content.addView(kpiCard(tr("series"), series == null ? 0 : arrayLength(series.optJSONArray("items"))));
@@ -888,7 +923,6 @@ public class MainActivity extends Activity {
     }
 
     private void addRpaControls() {
-        addSection(tr("rpa_restart"));
         LinearLayout panel = card();
         JSONObject bootstrap = cachedJson("bootstrap");
         JSONArray platforms = bootstrap == null ? null : bootstrap.optJSONArray("rpa_platforms");
@@ -950,8 +984,8 @@ public class MainActivity extends Activity {
                 applyDefaultProfileFromBootstrap(bootstrap);
                 applyMobileSettingsFromBootstrap(bootstrap);
                 StringBuilder debug = new StringBuilder("Début synchro\n");
-                JSONObject series = fetchAllTitles("series", fetchSync("/api/mobile/titles?type=series&per_page=100" + profileQuery()));
-                JSONObject movies = fetchAllTitles("movie", fetchSync("/api/mobile/titles?type=movie&per_page=100" + profileQuery()));
+                JSONObject series = fetchAllTitles("series", fetchSync("/api/mobile/titles?type=series&per_page=100" + allProfilesQuery()));
+                JSONObject movies = fetchAllTitles("movie", fetchSync("/api/mobile/titles?type=movie&per_page=100" + allProfilesQuery()));
                 writeCacheJson(cacheKeyForTitles("series"), series);
                 writeCacheJson(cacheKeyForTitles("movie"), movies);
                 writeCacheJson("bootstrap", bootstrap);
@@ -961,7 +995,7 @@ public class MainActivity extends Activity {
                 JSONObject currentCalendar = null;
                 for (int offset = 0; offset <= 18; offset++) {
                     YearMonth month = firstMonth.plusMonths(offset);
-                    JSONObject calendar = fetchSync("/api/mobile/calendar?month=" + month + profileQuery("&"));
+                    JSONObject calendar = fetchSync("/api/mobile/calendar?month=" + month + allProfilesQuery("&"));
                     writeCacheJson(cacheKeyForCalendar(month), calendar);
                     if (month.equals(YearMonth.now())) currentCalendar = calendar;
                 }
@@ -1064,7 +1098,7 @@ public class MainActivity extends Activity {
         appendItems(merged, firstPage.optJSONArray("items"));
         int totalPages = Math.max(1, firstPage.optInt("total_pages", 1));
         for (int page = 2; page <= totalPages; page++) {
-            appendItems(merged, fetchSync("/api/mobile/titles?type=" + url(type) + "&per_page=100&page=" + page + profileQuery("&")).optJSONArray("items"));
+            appendItems(merged, fetchSync("/api/mobile/titles?type=" + url(type) + "&per_page=100&page=" + page + allProfilesQuery("&")).optJSONArray("items"));
         }
         firstPage.put("items", merged);
         return firstPage;
@@ -1093,6 +1127,9 @@ public class MainActivity extends Activity {
         if (settings == null) return;
         prefs.edit()
                 .putInt("sync_alert_hours", clamp(settings.optInt("sync_alert_hours", 24), 1, 720))
+                .putBoolean("sync_alert_enabled", settings.optBoolean("sync_alert_enabled", true))
+                .putBoolean("episode_alert_enabled", settings.optBoolean("episode_alert_enabled", false))
+                .putBoolean("hide_empty_calendar_days", settings.optBoolean("hide_empty_calendar_days", false))
                 .apply();
     }
 
@@ -1118,6 +1155,20 @@ public class MainActivity extends Activity {
     private String profileQuery(String separator) {
         if (activeProfileKey == null || activeProfileKey.isEmpty()) return "";
         return separator + "profile=" + url(activeProfileKey);
+    }
+
+    private String allProfilesQuery() {
+        return allProfilesQuery("&");
+    }
+
+    private String allProfilesQuery(String separator) {
+        return separator + "profile=all";
+    }
+
+    private boolean profileMatches(JSONObject item) {
+        if (activeProfileKey == null || activeProfileKey.isEmpty()) return true;
+        String itemProfile = item.optString("profile_key", "");
+        return itemProfile.isEmpty() || activeProfileKey.equals(itemProfile);
     }
 
     private JSONObject fetchSync(String path) throws Exception {
@@ -1338,6 +1389,7 @@ public class MainActivity extends Activity {
     private static String translateFr(String key) {
         switch (key) {
             case "admin": return "Admin";
+            case "alerts": return "Alertes";
             case "app_version": return "Version application";
             case "calendar": return "Calendrier";
             case "calendar_unavailable": return "Calendrier offline indisponible. Va dans Admin puis lance Synchro.";
@@ -1349,6 +1401,10 @@ public class MainActivity extends Activity {
             case "display_help": return "Grille: colonnes 1 à 4. Pagination: nombre de lignes max par page.";
             case "display_saved": return "Affichage enregistré";
             case "episodes_seen": return "épisodes vus";
+            case "episode_alert_enabled": return "Alerte nouvel épisode disponible";
+            case "general": return "Général";
+            case "hide_empty_calendar_days": return "Masquer les jours sans sortie";
+            case "ignore_platform": return "Ignorer cette plateforme";
             case "language": return "Langue";
             case "last_ingestions": return "Dernières ingestions";
             case "last_sync": return "Dernière synchro";
@@ -1402,6 +1458,7 @@ public class MainActivity extends Activity {
             case "sync_done": return "Synchro terminée";
             case "sync_failed": return "Synchro impossible";
             case "sync_alert": return "Alerte synchro";
+            case "sync_alert_enabled": return "Activer l'alerte de synchro";
             case "sync_alert_help": return "Prévenir si la dernière synchro dépasse ce nombre d'heures.";
             case "sync_alert_saved": return "Alerte synchro enregistrée";
             case "sync_too_old": return "Alerte: synchro trop ancienne";
@@ -1417,6 +1474,7 @@ public class MainActivity extends Activity {
     private static String translateEn(String key) {
         switch (key) {
             case "admin": return "Admin";
+            case "alerts": return "Alerts";
             case "app_version": return "App version";
             case "calendar": return "Calendar";
             case "calendar_unavailable": return "Offline calendar unavailable. Go to Admin and run Sync.";
@@ -1428,6 +1486,10 @@ public class MainActivity extends Activity {
             case "display_help": return "Grid: 1 to 4 columns. Pagination: maximum rows per page.";
             case "display_saved": return "Display saved";
             case "episodes_seen": return "episodes watched";
+            case "episode_alert_enabled": return "New episode availability alert";
+            case "general": return "General";
+            case "hide_empty_calendar_days": return "Hide days without releases";
+            case "ignore_platform": return "Ignore this platform";
             case "language": return "Language";
             case "last_ingestions": return "Latest ingestions";
             case "last_sync": return "Last sync";
@@ -1481,6 +1543,7 @@ public class MainActivity extends Activity {
             case "sync_done": return "Sync complete";
             case "sync_failed": return "Sync failed";
             case "sync_alert": return "Sync alert";
+            case "sync_alert_enabled": return "Enable sync alert";
             case "sync_alert_help": return "Warn when the latest sync is older than this many hours.";
             case "sync_alert_saved": return "Sync alert saved";
             case "sync_too_old": return "Alert: sync is too old";
@@ -1496,6 +1559,7 @@ public class MainActivity extends Activity {
     private static String translateEs(String key) {
         switch (key) {
             case "admin": return "Admin";
+            case "alerts": return "Alertas";
             case "app_version": return "Versión de la aplicación";
             case "calendar": return "Calendario";
             case "calendar_unavailable": return "Calendario offline no disponible. Ve a Admin y lanza Synchro.";
@@ -1507,6 +1571,10 @@ public class MainActivity extends Activity {
             case "display_help": return "Cuadrícula: 1 a 4 columnas. Paginación: filas máximas por página.";
             case "display_saved": return "Visualización guardada";
             case "episodes_seen": return "episodios vistos";
+            case "episode_alert_enabled": return "Alerta de nuevo episodio disponible";
+            case "general": return "General";
+            case "hide_empty_calendar_days": return "Ocultar días sin estrenos";
+            case "ignore_platform": return "Ignorar esta plataforma";
             case "language": return "Idioma";
             case "last_ingestions": return "Últimas ingestas";
             case "last_sync": return "Última synchro";
@@ -1560,6 +1628,7 @@ public class MainActivity extends Activity {
             case "sync_done": return "Synchro terminada";
             case "sync_failed": return "Synchro imposible";
             case "sync_alert": return "Alerta de sincronización";
+            case "sync_alert_enabled": return "Activar alerta de sincronización";
             case "sync_alert_help": return "Avisar si la última sincronización supera este número de horas.";
             case "sync_alert_saved": return "Alerta de sincronización guardada";
             case "sync_too_old": return "Alerta: sincronización demasiado antigua";
@@ -1754,7 +1823,8 @@ public class MainActivity extends Activity {
         java.text.DateFormat time = android.text.format.DateFormat.getTimeFormat(this);
         String label = tr("last_sync") + ": " + date.format(value) + " " + time.format(value);
         long maxAgeMs = syncAlertHours() * 60L * 60L * 1000L;
-        if (System.currentTimeMillis() - value > maxAgeMs) {
+        if (prefs.getBoolean("sync_alert_enabled", true)
+                && System.currentTimeMillis() - value > maxAgeMs) {
             label += " · " + tr("sync_too_old") + " > " + syncAlertHours() + "h";
         }
         return label;
@@ -1802,7 +1872,7 @@ public class MainActivity extends Activity {
     }
 
     private String cacheKeyForTitles(String type) {
-        return "titles_" + safeCacheProfile() + "_" + type;
+        return "titles_all_" + type;
     }
 
     private static String cacheKeyForDetail(int id) {
@@ -1810,7 +1880,7 @@ public class MainActivity extends Activity {
     }
 
     private String cacheKeyForCalendar(YearMonth month) {
-        return "calendar_" + safeCacheProfile() + "_" + month;
+        return "calendar_all_" + month;
     }
 
     private String safeCacheProfile() {

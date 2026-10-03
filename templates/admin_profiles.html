@@ -11,26 +11,39 @@
   <a href="{{ url_for('admin_logs_view') }}">Logs</a>
   <a href="{{ url_for('admin_kpis_view') }}">KPIs</a>
   <a aria-current="page" href="{{ url_for('admin_profiles_view') }}">Profils</a>
+  <a href="{{ url_for('admin_alerts_view') }}">Alertes</a>
 </nav>
 
 {% if request.args.get('saved') %}<p class="notice">Configuration enregistrée.</p>{% endif %}
 
 <section class="admin-section">
-  <h2>Profils applicatifs</h2>
+  <h2>Méta-profils existants</h2>
   <div class="admin-list">
-  {% for profile in profiles %}
+  {% for profile in meta_profiles %}
     <article class="admin-row">
       <div>
         <strong>{{ profile.label }}</strong>
-        <span>{{ profile.key }} · {{ profile.technical_id }}</span>
+        <span>{{ profile.key }}</span>
+        {% if profile.platforms %}
+          <span>
+            {% for platform, profile_name in profile.platforms.items() %}
+              <b class="platform-mark platform-{{ platform }}">{{ platform_labels.get(platform, platform) if platform_labels is defined else platform }}</b> {{ profile_name }}
+            {% endfor %}
+          </span>
+        {% endif %}
       </div>
-      <div class="row-meta">{{ "junior" if profile.is_junior else "standard" }}</div>
+      <div class="row-meta">
+        <a class="button-link" href="#meta-profile-form">Modifier</a>
+        <span>{{ profile.platforms|length }} plateformes</span>
+      </div>
     </article>
+  {% else %}
+    <p class="empty">Aucun méta-profil créé.</p>
   {% endfor %}
   </div>
 </section>
 
-<section class="admin-section">
+<section class="admin-section" id="meta-profile-form">
   <h2>{% if has_meta_profiles %}Créer / remplacer un méta-profil{% else %}Créer la matrice de profils{% endif %}</h2>
   {% if not has_meta_profiles %}
     <p class="muted">Aucune matrice n'existe encore sur le serveur. Sélectionne uniquement les profils des plateformes configurées pour créer un profil unifié.</p>
@@ -52,40 +65,6 @@
     {% endfor %}
     </div>
     <button type="submit">Créer / remplacer</button>
-  </form>
-</section>
-
-<section class="admin-section">
-  <h2>Méta-profils existants</h2>
-  <div class="admin-list">
-  {% for profile in meta_profiles %}
-    <article class="admin-row">
-      <div>
-        <strong>{{ profile.label }}</strong>
-        <span>{{ profile.key }}</span>
-        {% if profile.platforms %}
-          <span>
-            {% for platform, profile_name in profile.platforms.items() %}
-              <b class="platform-mark platform-{{ platform }}">{{ platform_labels.get(platform, platform) if platform_labels is defined else platform }}</b> {{ profile_name }}
-            {% endfor %}
-          </span>
-        {% endif %}
-      </div>
-      <div class="row-meta">{{ profile.platforms|length }} plateformes</div>
-    </article>
-  {% else %}
-    <p class="empty">Aucun méta-profil créé.</p>
-  {% endfor %}
-  </div>
-</section>
-
-<section class="admin-section">
-  <h2>Alerte mobile</h2>
-  <form class="admin-profile-form" method="post" action="{{ url_for('admin_update_mobile_settings') }}">
-    <label>Notifier si la dernière synchro mobile dépasse X heures
-      <input type="number" min="1" max="720" name="sync_alert_hours" value="{{ mobile_settings.sync_alert_hours }}">
-    </label>
-    <button type="submit">Enregistrer</button>
   </form>
 </section>
 {% endblock %}

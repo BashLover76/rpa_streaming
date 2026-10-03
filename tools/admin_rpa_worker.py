@@ -66,6 +66,7 @@ def run_job(job: dict[str, Any]) -> None:
 def build_rpa_command(job: dict[str, Any]) -> list[str]:
     platform = str(job["platform"])
     profile_key = str(job.get("profile_key") or "").strip()
+    source = str(job.get("source") or "web").strip() or "web"
     runner = os.getenv("ADMIN_RPA_RUNNER", "local").strip().casefold()
     if runner == "docker":
         compose_file = os.getenv("ADMIN_RPA_COMPOSE_FILE", "docker-compose.rpa.yml")
@@ -87,6 +88,8 @@ def build_rpa_command(job: dict[str, Any]) -> list[str]:
             os.getenv("ADMIN_RPA_CDP_URL", "http://127.0.0.1:9222"),
             "--rpa-mode",
             "differential",
+            "--ingestion-source",
+            source,
             "--skip-crunchyroll-api",
             "--no-auto-start-chrome",
         ]
@@ -109,6 +112,8 @@ def build_rpa_command(job: dict[str, Any]) -> list[str]:
         os.getenv("RPA_CDP_URL", "http://127.0.0.1:9222"),
         "--rpa-mode",
         "differential",
+        "--ingestion-source",
+        source,
         "--skip-crunchyroll-api",
         "--no-auto-start-chrome",
     ]
