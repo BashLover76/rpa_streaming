@@ -2395,7 +2395,12 @@ def fetch_history(series_id: int) -> list[dict[str, Any]]:
         item = dict(row)
         item["display_title"] = clean_history_title(item)
         identity = episode_identity(item)
-        key = (identity, item.get("date_vu")) if identity else ("row", item["id"])
+        profile_key = item.get("profile_key") or "unknown"
+        key = (
+            (profile_key, identity, item.get("date_vu"))
+            if identity
+            else ("row", item["id"])
+        )
         if key not in seen:
             seen.add(key)
             result.append(item)
@@ -2621,10 +2626,14 @@ def mobile_title_detail(
 
 def mobile_history_item(item: dict[str, Any]) -> dict[str, Any]:
     platform = item.get("plateforme_source") or "unknown"
+    profile_key = item.get("profile_key") or "unknown"
+    profile_labels = {profile["key"]: profile["label"] for profile in profile_options()}
     return {
         "id": item.get("id"),
         "platform": platform,
         "platform_label": PLATFORM_LABELS.get(platform, platform),
+        "profile_key": profile_key,
+        "profile_label": profile_labels.get(profile_key, profile_key),
         "season": item.get("saison"),
         "episode": item.get("episode"),
         "episode_title": item.get("display_title") or item.get("episode_title"),

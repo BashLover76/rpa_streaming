@@ -447,13 +447,13 @@ public class MainActivity extends Activity {
         open.setOnClickListener(v -> openDeepLink(payload.optString("deep_link_url")));
         hero.addView(open);
         content.addView(hero);
+        addSection(tr("recent_history"));
+        addEpisodeList(payload.optJSONArray("history"), true);
+        addProfileProgress(payload.optJSONArray("profile_progress"));
         if (!"movie".equals(payload.optString("type"))) {
             addSection(tr("upcoming"));
             addEpisodeList(payload.optJSONArray("upcoming"), false);
         }
-        addSection(tr("recent_history"));
-        addEpisodeList(payload.optJSONArray("history"), true);
-        addProfileProgress(payload.optJSONArray("profile_progress"));
     }
 
     private void addProfileProgress(JSONArray items) {
@@ -483,7 +483,10 @@ public class MainActivity extends Activity {
             LinearLayout row = card();
             String date = watched ? item.optString("watched_at", "?") : item.optString("release_date", "?");
             String episode = episodeCode(item);
-            row.addView(titleText(episode.isEmpty() ? date : date + " · " + episode, 16));
+            String profile = watched ? item.optString("profile_label", "") : "";
+            String heading = episode.isEmpty() ? date : date + " · " + episode;
+            if (!profile.isEmpty() && !"null".equals(profile)) heading += " · " + profile;
+            row.addView(titleText(heading, 16));
             row.addView(line(item.optString("episode_title")));
             row.setOnClickListener(v -> openDeepLink(item.optString("deep_link_url")));
             content.addView(row);
