@@ -91,6 +91,7 @@ public class MainActivity extends Activity {
     private String sortMode = "recent";
     private String language = "fr";
     private String activeProfileKey = "";
+    private String adminSection = "general";
     private boolean bootstrapRefreshInFlight = false;
 
     @Override
@@ -540,6 +541,50 @@ public class MainActivity extends Activity {
     }
 
     private void renderAdmin() {
+        addAdminSubTabs();
+        if ("profiles".equals(adminSection)) {
+            renderAdminProfiles();
+        } else if ("rpa".equals(adminSection)) {
+            renderAdminRpa();
+        } else if ("kpi".equals(adminSection)) {
+            renderAdminKpi();
+        } else if ("alerts".equals(adminSection)) {
+            renderAdminAlerts();
+        } else {
+            renderAdminGeneral();
+        }
+        addMessage(tr("app_version") + ": " + APP_VERSION);
+    }
+
+    private void addAdminSubTabs() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        addAdminSubTab(row, "general", R.drawable.ic_general, tr("general"));
+        addAdminSubTab(row, "profiles", R.drawable.ic_profile, tr("profile"));
+        addAdminSubTab(row, "rpa", R.drawable.ic_robot, tr("rpa_restart"));
+        addAdminSubTab(row, "kpi", R.drawable.ic_kpi, tr("offline_kpis"));
+        addAdminSubTab(row, "alerts", R.drawable.ic_alert, tr("alerts"));
+        content.addView(row);
+    }
+
+    private void addAdminSubTab(LinearLayout row, String key, int iconRes, String description) {
+        Button button = new Button(this);
+        button.setText("");
+        button.setContentDescription(description);
+        button.setCompoundDrawablesWithIntrinsicBounds(0, iconRes, 0, 0);
+        button.setGravity(Gravity.CENTER);
+        button.setMinHeight(dp(42));
+        styleButton(button, key.equals(adminSection));
+        button.setOnClickListener(v -> {
+            adminSection = key;
+            render(Screen.admin());
+        });
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(48), 1);
+        params.setMargins(dp(2), 0, dp(2), dp(6));
+        row.addView(button, params);
+    }
+
+    private void renderAdminGeneral() {
         addSection(tr("general"));
         addSection(tr("server_connection"));
         serverInput = new EditText(this);
@@ -557,20 +602,32 @@ public class MainActivity extends Activity {
         content.addView(syncStatus);
         addLanguageSettings();
         addAdminSettings();
+    }
+
+    private void renderAdminProfiles() {
         addSection(tr("profile"));
         addProfileSettings();
         addCreateMetaProfileSettings();
         addMetaProfileSettings();
         addPlatformProfileSettings();
+    }
+
+    private void renderAdminRpa() {
         addSection(tr("rpa_restart"));
         addRpaControls();
+        addIngestionStatuses();
+        addDebugLog();
+    }
+
+    private void renderAdminKpi() {
         addSection(tr("offline_kpis"));
         addAdminKpis();
         addIngestionStatuses();
+    }
+
+    private void renderAdminAlerts() {
         addSection(tr("alerts"));
         addSyncAlertSettings();
-        addDebugLog();
-        addMessage(tr("app_version") + ": " + APP_VERSION);
     }
 
     private void addAdminSettings() {
