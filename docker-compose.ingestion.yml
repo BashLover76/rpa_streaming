@@ -44,7 +44,7 @@ services:
     volumes:
       - streaming-web-data:/data
       - streaming-web-config:/app/config:ro
-      - rpa-state:/app/.continue
+      - streaming-web-state:/app/.continue
       - rpa-logs:/app/logs
       - rpa-artifacts:/app/artifacts
       - rpa-backups:/app/backups
@@ -59,7 +59,9 @@ volumes:
   streaming-web-config:
     external: true
     name: rpa_streaming_streaming-web-config
-  rpa-state:
+  streaming-web-state:
+    external: true
+    name: rpa_streaming_streaming-web-state
   rpa-logs:
   rpa-artifacts:
   rpa-backups:
