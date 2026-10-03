@@ -1225,7 +1225,10 @@ public class MainActivity extends Activity {
     private boolean profileMatches(JSONObject item) {
         if (activeProfileKey == null || activeProfileKey.isEmpty()) return true;
         String itemProfile = item.optString("profile_key", "");
-        return itemProfile.isEmpty() || activeProfileKey.equals(itemProfile);
+        return itemProfile.isEmpty()
+                || "null".equalsIgnoreCase(itemProfile)
+                || "default".equalsIgnoreCase(itemProfile)
+                || activeProfileKey.equals(itemProfile);
     }
 
     private JSONObject fetchSync(String path) throws Exception {
