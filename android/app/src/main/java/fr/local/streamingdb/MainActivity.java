@@ -157,7 +157,14 @@ public class MainActivity extends Activity {
             public void afterTextChanged(Editable value) {
             }
         });
-        root.addView(searchInput, matchWrap());
+        LinearLayout searchRow = new LinearLayout(this);
+        searchRow.setOrientation(LinearLayout.HORIZONTAL);
+        searchRow.addView(searchInput, new LinearLayout.LayoutParams(0, -2, 1));
+        Button clearSearch = button("×", false);
+        clearSearch.setContentDescription(tr("clear_search"));
+        clearSearch.setOnClickListener(v -> searchInput.setText(""));
+        searchRow.addView(clearSearch, new LinearLayout.LayoutParams(dp(44), -2));
+        root.addView(searchRow, matchWrap());
 
         tabs = new LinearLayout(this);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
@@ -446,30 +453,46 @@ public class MainActivity extends Activity {
         Button open = button(tr("open_platform"), true);
         open.setOnClickListener(v -> openDeepLink(currentProfileDeepLink(payload)));
         hero.addView(open);
-        addProfileProgress(hero, payload.optJSONArray("profile_progress"));
         content.addView(hero);
-        addSection(tr("recent_history"));
-        addEpisodeList(payload.optJSONArray("history"), true);
+        LinearLayout progressBody = addCollapsibleSection(tr("profile_progress"), false);
+        addProfileProgress(progressBody, payload.optJSONArray("profile_progress"), payload.optString("type"));
         if (!"movie".equals(payload.optString("type"))) {
-            addSection(tr("upcoming"));
-            addEpisodeList(payload.optJSONArray("upcoming"), false);
+            LinearLayout upcomingBody = addCollapsibleSection(tr("upcoming"), false);
+            addEpisodeList(upcomingBody, payload.optJSONArray("upcoming"), false);
         }
+        LinearLayout historyBody = addCollapsibleSection(tr("recent_history"), false);
+        addEpisodeList(historyBody, payload.optJSONArray("history"), true);
     }
 
-    private void addProfileProgress(LinearLayout parent, JSONArray items) {
-        if (items == null || items.length() == 0) return;
-        parent.addView(titleText(tr("profile_progress"), 18));
+    private void addProfileProgress(LinearLayout parent, JSONArray items, String contentType) {
+        if (items == null || items.length() == 0) {
+            addMessage(parent, tr("no_data"));
+            return;
+        }
+        int displayed = 0;
         for (int index = 0; index < items.length(); index++) {
             JSONObject item = items.optJSONObject(index);
             if (item == null) continue;
+            if (item.optInt("history_count", 0) <= 0 && item.optInt("watched_episodes", 0) <= 0) continue;
             LinearLayout row = card();
             String label = item.optString("profile_label", item.optString("profile_key", ""));
-            String watched = item.optInt("watched_episodes", 0) + " " + tr("episodes_seen");
+            String watched;
+            if ("movie".equals(contentType) || "movie".equals(item.optString("content_type"))) {
+                watched = item.optBoolean("watched", item.optInt("history_count", 0) > 0) ? tr("watched") : tr("not_watched");
+            } else {
+                int seen = item.optInt("watched_episodes", 0);
+                int total = item.optInt("episode_count", 0);
+                watched = total > 0
+                        ? seen + "/" + total + " " + tr("episodes_seen")
+                        : seen + " " + tr("episodes_seen");
+            }
             String date = item.optString("last_watched_at", "");
             row.addView(titleText(label, 16));
             row.addView(line(date.isEmpty() ? watched : watched + " · " + date));
             parent.addView(row);
+            displayed++;
         }
+        if (displayed == 0) addMessage(parent, tr("no_data"));
     }
 
     private String currentProfileDeepLink(JSONObject payload) {
@@ -489,8 +512,12 @@ public class MainActivity extends Activity {
     }
 
     private void addEpisodeList(JSONArray items, boolean watched) {
+        addEpisodeList(content, items, watched);
+    }
+
+    private void addEpisodeList(LinearLayout parent, JSONArray items, boolean watched) {
         if (items == null || items.length() == 0) {
-            addMessage(tr("no_data"));
+            addMessage(parent, tr("no_data"));
             return;
         }
         for (int index = 0; index < Math.min(items.length(), 30); index++) {
@@ -505,7 +532,7 @@ public class MainActivity extends Activity {
             row.addView(titleText(heading, 16));
             row.addView(line(item.optString("episode_title")));
             row.setOnClickListener(v -> openDeepLink(item.optString("deep_link_url")));
-            content.addView(row);
+            parent.addView(row);
         }
     }
 
@@ -1464,10 +1491,29 @@ public class MainActivity extends Activity {
         content.addView(view);
     }
 
+    private LinearLayout addCollapsibleSection(String value, boolean expandedByDefault) {
+        LinearLayout panel = card();
+        Button header = button(value, false);
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setVisibility(expandedByDefault ? LinearLayout.VISIBLE : LinearLayout.GONE);
+        header.setOnClickListener(v -> body.setVisibility(
+                body.getVisibility() == LinearLayout.VISIBLE ? LinearLayout.GONE : LinearLayout.VISIBLE
+        ));
+        panel.addView(header);
+        panel.addView(body);
+        content.addView(panel);
+        return body;
+    }
+
     private void addMessage(String value) {
+        addMessage(content, value);
+    }
+
+    private void addMessage(LinearLayout parent, String value) {
         TextView view = line(value);
         view.setGravity(Gravity.CENTER);
-        content.addView(view);
+        parent.addView(view);
     }
 
     private void addNullable(LinearLayout parent, String value) {
@@ -1518,6 +1564,7 @@ public class MainActivity extends Activity {
             case "calendar": return "Calendrier";
             case "calendar_unavailable": return "Calendrier offline indisponible. Va dans Admin puis lance Synchro.";
             case "cards": return "fiches";
+            case "clear_search": return "Effacer la recherche";
             case "columns_hint": return "Colonnes 1-4";
             case "create_profile": return "Créer un profil";
             case "detail_unavailable": return "Détail indisponible offline. Relance une Synchro.";
@@ -1542,6 +1589,7 @@ public class MainActivity extends Activity {
             case "no_data": return "Aucune donnée.";
             case "no_last_ingestion": return "Jamais ingéré";
             case "not_configured": return "Non configuré";
+            case "not_watched": return "Non vu";
             case "no_sync_yet": return "Aucune synchro lancée depuis cette installation.";
             case "no_offline_data": return "Aucune donnée offline. Va dans Admin puis lance Synchro.";
             case "no_platform_link": return "Aucun lien plateforme disponible";
@@ -1593,6 +1641,7 @@ public class MainActivity extends Activity {
             case "title_az": return "Titre A-Z";
             case "titles": return "titres";
             case "upcoming": return "Prochaines sorties";
+            case "watched": return "Vu";
             default: return key;
         }
     }
@@ -1605,6 +1654,7 @@ public class MainActivity extends Activity {
             case "calendar": return "Calendar";
             case "calendar_unavailable": return "Offline calendar unavailable. Go to Admin and run Sync.";
             case "cards": return "cards";
+            case "clear_search": return "Clear search";
             case "columns_hint": return "Columns 1-4";
             case "create_profile": return "Create profile";
             case "detail_unavailable": return "Detail unavailable offline. Run Sync again.";
@@ -1629,6 +1679,7 @@ public class MainActivity extends Activity {
             case "no_data": return "No data.";
             case "no_last_ingestion": return "Never ingested";
             case "not_configured": return "Not configured";
+            case "not_watched": return "Not watched";
             case "no_sync_yet": return "No sync has run on this installation.";
             case "no_offline_data": return "No offline data. Go to Admin and run Sync.";
             case "no_platform_link": return "No platform link available";
@@ -1680,6 +1731,7 @@ public class MainActivity extends Activity {
             case "title_az": return "Title A-Z";
             case "titles": return "titles";
             case "upcoming": return "Upcoming";
+            case "watched": return "Watched";
             default: return key;
         }
     }
@@ -1692,6 +1744,7 @@ public class MainActivity extends Activity {
             case "calendar": return "Calendario";
             case "calendar_unavailable": return "Calendario offline no disponible. Ve a Admin y lanza Synchro.";
             case "cards": return "fichas";
+            case "clear_search": return "Borrar búsqueda";
             case "columns_hint": return "Columnas 1-4";
             case "create_profile": return "Crear perfil";
             case "detail_unavailable": return "Detalle no disponible offline. Lanza Synchro de nuevo.";
@@ -1716,6 +1769,7 @@ public class MainActivity extends Activity {
             case "no_data": return "Sin datos.";
             case "no_last_ingestion": return "Nunca ingerido";
             case "not_configured": return "No configurado";
+            case "not_watched": return "No visto";
             case "no_sync_yet": return "No se ha lanzado ninguna synchro en esta instalación.";
             case "no_offline_data": return "Sin datos offline. Ve a Admin y lanza Synchro.";
             case "no_platform_link": return "Sin enlace de plataforma disponible";
@@ -1767,6 +1821,7 @@ public class MainActivity extends Activity {
             case "title_az": return "Título A-Z";
             case "titles": return "títulos";
             case "upcoming": return "Próximas salidas";
+            case "watched": return "Visto";
             default: return key;
         }
     }

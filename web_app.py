@@ -2424,15 +2424,27 @@ def fetch_history(series_id: int) -> list[dict[str, Any]]:
 
 def fetch_profile_progress(series_id: int, *, scope: str = "meta") -> list[dict[str, Any]]:
     profile_labels = {profile["key"]: profile["label"] for profile in profile_options()}
-    platform = (
+    series_row = (
         get_db()
         .execute(
-            "SELECT COALESCE(plateforme, 'unknown') AS platform FROM series WHERE id = ?",
+            """
+            SELECT COALESCE(plateforme, 'unknown') AS platform,
+                   COALESCE(episodes_count, 0) AS episode_count,
+                   COALESCE(imdb_kind, '') AS imdb_kind
+            FROM series
+            WHERE id = ?
+            """,
             (series_id,),
         )
         .fetchone()
     )
-    platform_key = platform["platform"] if platform else "unknown"
+    platform_key = series_row["platform"] if series_row else "unknown"
+    total_episodes = int(series_row["episode_count"] or 0) if series_row else 0
+    content_type = (
+        "movie"
+        if series_row and str(series_row["imdb_kind"]).casefold() in {"movie", "film"}
+        else "series"
+    )
     platform_profile_labels = platform_profile_labels_for(platform_key)
     rows = (
         get_db()
@@ -2441,7 +2453,10 @@ def fetch_profile_progress(series_id: int, *, scope: str = "meta") -> list[dict[
         SELECT
             COALESCE(h.profile_key, 'unknown') AS profile_key,
             COUNT(DISTINCT h.id) AS history_count,
-            COUNT(DISTINCT CASE WHEN h.episode IS NOT NULL THEN h.episode END) AS watched_episodes,
+            COUNT(DISTINCT CASE
+                WHEN h.saison IS NOT NULL OR h.episode IS NOT NULL
+                THEN COALESCE(h.saison, 0) || ':' || COALESCE(h.episode, 0)
+            END) AS watched_numbered_episodes,
             MAX(CASE WHEN h.date_vu GLOB '????-??-??*' THEN DATE(h.date_vu) END) AS last_watched_at,
             MAX(h.progress_percent) AS progress_percent,
             MAX(h.status) AS status
@@ -2454,8 +2469,7 @@ def fetch_profile_progress(series_id: int, *, scope: str = "meta") -> list[dict[
         )
         .fetchall()
     )
-    progress = []
-    seen = set()
+    progress_by_key: dict[str, dict[str, Any]] = {}
     for row in rows:
         item = dict(row)
         key = item["profile_key"]
@@ -2463,37 +2477,42 @@ def fetch_profile_progress(series_id: int, *, scope: str = "meta") -> list[dict[
         if scope == "platform":
             label = platform_profile_labels.get(key, label)
             key = f"{platform_key}:{label}"
-        seen.add(key)
-        progress.append(
-            {
+        watched_episodes = int(item["watched_numbered_episodes"] or 0)
+        if watched_episodes <= 0 and int(item["history_count"] or 0) > 0:
+            watched_episodes = int(item["history_count"] or 0)
+        if int(item["history_count"] or 0) <= 0 and watched_episodes <= 0:
+            continue
+        previous = progress_by_key.get(key)
+        current = {
                 "profile_key": key,
                 "profile_label": label,
-                "history_count": item["history_count"],
-                "watched_episodes": item["watched_episodes"],
+                "content_type": content_type,
+                "history_count": int(item["history_count"] or 0),
+                "watched_episodes": watched_episodes,
+                "episode_count": total_episodes,
+                "watched": True,
                 "last_watched_at": item["last_watched_at"],
                 "progress_percent": item["progress_percent"],
                 "status": item["status"],
             }
-        )
-    source_labels = (
-        platform_profile_labels if scope == "platform" else profile_labels
-    )
-    for key, label in source_labels.items():
-        display_key = f"{platform_key}:{label}" if scope == "platform" else key
-        if display_key in seen:
+        if previous is None:
+            progress_by_key[key] = current
             continue
-        progress.append(
-            {
-                "profile_key": display_key,
-                "profile_label": label,
-                "history_count": 0,
-                "watched_episodes": 0,
-                "last_watched_at": None,
-                "progress_percent": None,
-                "status": None,
-            }
-        )
-    return progress
+        previous["history_count"] += current["history_count"]
+        previous["watched_episodes"] += current["watched_episodes"]
+        previous["last_watched_at"] = max(
+            previous.get("last_watched_at") or "",
+            current.get("last_watched_at") or "",
+        ) or None
+        previous["progress_percent"] = max(
+            previous.get("progress_percent") or 0,
+            current.get("progress_percent") or 0,
+        ) or None
+    return sorted(
+        progress_by_key.values(),
+        key=lambda item: (item.get("last_watched_at") or "", item["profile_label"]),
+        reverse=True,
+    )
 
 
 def platform_profile_labels_for(platform: str) -> dict[str, str]:
@@ -2776,6 +2795,13 @@ def infer_status(
     full_calendar: list[dict[str, Any]],
 ) -> dict[str, str]:
     beta_status = (serie.get("betaseries_status") or "").casefold()
+    incoming_season = next_incoming_season(upcoming, full_calendar)
+    if incoming_season:
+        return {
+            "label": "Saison à venir",
+            "tone": "good",
+            "detail": incoming_season,
+        }
     if beta_status in {"continuing", "returning series", "en cours"}:
         if upcoming:
             next_item = upcoming[0]
@@ -2813,6 +2839,35 @@ def infer_status(
         "tone": "warn",
         "detail": "Aucun calendrier BetaSeries n'est encore associé à cette série.",
     }
+
+
+def next_incoming_season(
+    upcoming: list[dict[str, Any]], full_calendar: list[dict[str, Any]]
+) -> str | None:
+    if not upcoming:
+        return None
+    today = date.today()
+    past_seasons = []
+    for item in full_calendar:
+        try:
+            release_date = date.fromisoformat(str(item.get("date_diffusion") or ""))
+        except ValueError:
+            continue
+        season = item.get("saison")
+        if season is not None and release_date < today:
+            past_seasons.append(int(season))
+    last_known_season = max(past_seasons or [0])
+    next_item = upcoming[0]
+    try:
+        next_season = int(next_item.get("saison") or 0)
+    except (TypeError, ValueError):
+        return None
+    if next_season <= last_known_season:
+        return None
+    release_date = next_item.get("date_diffusion")
+    if release_date:
+        return f"Saison {next_season} is coming le {release_date}."
+    return f"Saison {next_season} is coming."
 
 
 app = create_app()
