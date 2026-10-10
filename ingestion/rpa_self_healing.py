@@ -211,10 +211,15 @@ class SelfHealingRPA:
         LOGGER.info("Connecting to Chrome over CDP: %s", self.cdp_url)
         cdp_endpoint = self._preflight_cdp_endpoint()
         try:
+            cdp_headers = (
+                {}
+                if urlsplit(cdp_endpoint).scheme in {"ws", "wss"}
+                else _cdp_playwright_headers(self.cdp_url)
+            )
             browser = playwright.chromium.connect_over_cdp(
                 cdp_endpoint,
                 timeout=self.cdp_timeout_ms,
-                headers=_cdp_playwright_headers(self.cdp_url),
+                headers=cdp_headers,
             )
         except Exception as exc:
             raise CDPConnectionError(_cdp_recovery_message(self.cdp_url)) from exc
