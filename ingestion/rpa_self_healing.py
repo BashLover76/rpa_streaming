@@ -209,10 +209,10 @@ class SelfHealingRPA:
         they belong to Chrome, not to this process.
         """
         LOGGER.info("Connecting to Chrome over CDP: %s", self.cdp_url)
-        self._preflight_cdp_endpoint()
+        cdp_endpoint = self._preflight_cdp_endpoint()
         try:
             browser = playwright.chromium.connect_over_cdp(
-                self.cdp_url,
+                cdp_endpoint,
                 timeout=self.cdp_timeout_ms,
                 headers=_cdp_playwright_headers(self.cdp_url),
             )
@@ -315,9 +315,9 @@ class SelfHealingRPA:
         finally:
             page.close()
 
-    def _preflight_cdp_endpoint(self) -> None:
+    def _preflight_cdp_endpoint(self) -> str:
         if not self.cdp_url:
-            return
+            return ""
         version_url = urljoin(self.cdp_url.rstrip("/") + "/", "json/version")
         try:
             request = Request(
@@ -341,9 +341,14 @@ class SelfHealingRPA:
                 f"Chrome CDP responded at {version_url}, but did not expose "
                 "webSocketDebuggerUrl. Restart Chrome with --remote-debugging-port=9222."
             )
+        connect_url = _normalize_cdp_websocket_url(websocket_url, self.cdp_url)
         LOGGER.info(
-            "Chrome CDP preflight OK: browser=%s ws=%s", browser_name, websocket_url
+            "Chrome CDP preflight OK: browser=%s ws=%s connect=%s",
+            browser_name,
+            websocket_url,
+            connect_url,
         )
+        return connect_url
 
     def _run_platform(self, page: Page, config: PlatformConfig) -> int:
         LOGGER.info("Starting RPA platform sync: %s", config.name)
@@ -1783,6 +1788,29 @@ def _cdp_request_headers(cdp_url: str | None) -> dict[str, str]:
 
 def _cdp_playwright_headers(cdp_url: str | None) -> dict[str, str]:
     return _cdp_request_headers(cdp_url)
+
+
+def _normalize_cdp_websocket_url(websocket_url: str, cdp_url: str | None) -> str:
+    """Make Chrome's websocket URL reachable from Docker/WSL callers.
+
+    Chrome often exposes ``ws://127.0.0.1:9222/...`` in /json/version. That is
+    valid from the host, but from a Docker container 127.0.0.1 points to the
+    container itself. When the caller used host.docker.internal, keep the
+    websocket path but rewrite the advertised loopback host to the reachable
+    caller host.
+    """
+    if not cdp_url:
+        return websocket_url
+    cdp = urlsplit(cdp_url)
+    ws = urlsplit(websocket_url)
+    if cdp.hostname != "host.docker.internal":
+        return websocket_url
+    if ws.hostname not in {"127.0.0.1", "localhost", "::1"}:
+        return websocket_url
+    netloc = cdp.hostname
+    if ws.port:
+        netloc = f"{netloc}:{ws.port}"
+    return ws._replace(netloc=netloc).geturl()
 
 
 def _looks_like_selector(selector: str) -> bool:
