@@ -211,16 +211,12 @@ class SelfHealingRPA:
         LOGGER.info("Connecting to Chrome over CDP: %s", self.cdp_url)
         cdp_endpoint = self._preflight_cdp_endpoint()
         try:
-            cdp_headers = (
-                {}
-                if urlsplit(cdp_endpoint).scheme in {"ws", "wss"}
-                else _cdp_playwright_headers(self.cdp_url)
-            )
-            browser = playwright.chromium.connect_over_cdp(
-                cdp_endpoint,
-                timeout=self.cdp_timeout_ms,
-                headers=cdp_headers,
-            )
+            cdp_options: dict[str, Any] = {
+                "timeout": self.cdp_timeout_ms,
+            }
+            if urlsplit(cdp_endpoint).scheme not in {"ws", "wss"}:
+                cdp_options["headers"] = _cdp_playwright_headers(self.cdp_url)
+            browser = playwright.chromium.connect_over_cdp(cdp_endpoint, **cdp_options)
         except Exception as exc:
             raise CDPConnectionError(_cdp_recovery_message(self.cdp_url)) from exc
         if not browser.contexts:
@@ -1798,11 +1794,11 @@ def _cdp_playwright_headers(cdp_url: str | None) -> dict[str, str]:
 def _normalize_cdp_websocket_url(websocket_url: str, cdp_url: str | None) -> str:
     """Make Chrome's websocket URL reachable from Docker/WSL callers.
 
-    Chrome often exposes ``ws://127.0.0.1:9222/...`` in /json/version. That is
-    valid from the host, but from a Docker container 127.0.0.1 points to the
-    container itself. When the caller used host.docker.internal, keep the
-    websocket path but rewrite the advertised loopback host to the reachable
-    caller host.
+    Chrome often exposes ``ws://127.0.0.1:9222/...`` in /json/version. The RPA
+    Docker entrypoint provides a local socat proxy on 127.0.0.1:9222 because
+    Chrome rejects websocket Host headers such as ``host.docker.internal``.
+    Keep Chrome's loopback websocket URL in that case so Playwright talks to
+    the local proxy with an accepted Host header.
     """
     if not cdp_url:
         return websocket_url
@@ -1812,10 +1808,7 @@ def _normalize_cdp_websocket_url(websocket_url: str, cdp_url: str | None) -> str
         return websocket_url
     if ws.hostname not in {"127.0.0.1", "localhost", "::1"}:
         return websocket_url
-    netloc = cdp.hostname
-    if ws.port:
-        netloc = f"{netloc}:{ws.port}"
-    return ws._replace(netloc=netloc).geturl()
+    return websocket_url
 
 
 def _looks_like_selector(selector: str) -> bool:
