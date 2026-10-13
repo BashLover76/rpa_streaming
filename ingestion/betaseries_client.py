@@ -217,6 +217,89 @@ class BetaSeriesClient:
         LOGGER.info("BetaSeries local series calendars synced: %s episodes", synced)
         return synced
 
+    def sync_local_series_to_member(
+        self,
+        *,
+        platform: str | None = None,
+        limit: int | None = None,
+    ) -> int:
+        """Add locally resolved shows to the authenticated BetaSeries account."""
+        existing_ids = self.member_show_ids()
+        query = """
+            SELECT DISTINCT s.id, s.titre, s.betaseries_id
+            FROM series AS s
+            LEFT JOIN history AS h ON h.serie_id = s.id
+            WHERE s.betaseries_id IS NOT NULL
+              AND COALESCE(LOWER(s.imdb_kind), '') NOT IN ('movie', 'film')
+        """
+        params: list[Any] = []
+        if platform:
+            query += """
+              AND (
+                s.plateforme = ?
+                OR h.plateforme_source = ?
+              )
+            """
+            params.extend([platform, platform])
+        query += " ORDER BY s.updated_at DESC, s.id DESC"
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(limit)
+
+        with self.db.connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+
+        added = 0
+        for row in rows:
+            show_id = int(row["betaseries_id"])
+            if show_id in existing_ids:
+                continue
+            try:
+                self.add_show_to_member(show_id)
+            except (httpx.HTTPError, RuntimeError) as exc:
+                LOGGER.warning(
+                    "BetaSeries member add skipped for %s (%s): %s",
+                    row["titre"],
+                    show_id,
+                    exc,
+                )
+                continue
+            existing_ids.add(show_id)
+            added += 1
+        LOGGER.info("BetaSeries member series synced: %s added", added)
+        return added
+
+    def member_show_ids(self) -> set[int]:
+        try:
+            payload = self._get_json("shows/member")
+        except RuntimeError as exc:
+            LOGGER.warning("BetaSeries member shows fetch failed: %s", exc)
+            return set()
+        shows = payload.get("shows") or []
+        return {
+            int(show["id"])
+            for show in shows
+            if isinstance(show, dict) and show.get("id") is not None
+        }
+
+    def add_show_to_member(self, show_id: int | str) -> dict[str, Any]:
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(
+                f"{self.BASE_URL}/shows/show",
+                headers=self._headers(),
+                params={"id": str(show_id)},
+            )
+        if response.is_error:
+            LOGGER.warning(
+                "BetaSeries add show failed for %s: status=%s body=%s",
+                show_id,
+                response.status_code,
+                response.text[:500],
+            )
+        response.raise_for_status()
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {}
+
     def search_show(self, title: str) -> dict[str, Any] | None:
         try:
             shows = self._get_json("shows/search", params={"title": title}).get(

@@ -106,6 +106,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--betaseries-days-before", type=int, default=30)
     parser.add_argument("--betaseries-days-after", type=int, default=90)
     parser.add_argument(
+        "--sync-betaseries-member-series",
+        action="store_true",
+        help="Add locally resolved series to the authenticated BetaSeries member account.",
+    )
+    parser.add_argument(
         "--lock-file",
         type=Path,
         default=Path(".continue/ingestion.lock"),
@@ -265,6 +270,8 @@ def run(args: argparse.Namespace) -> None:
                 pipeline.run(platform=args.platform, retry=args.retry_unresolved)
         if beta:
             try:
+                if args.sync_betaseries_member_series:
+                    beta.sync_local_series_to_member(platform=args.platform)
                 beta.sync_calendar(
                     days_before=args.betaseries_days_before,
                     days_after=args.betaseries_days_after,
