@@ -269,6 +269,11 @@ def run(args: argparse.Namespace) -> None:
                     days_before=args.betaseries_days_before,
                     days_after=args.betaseries_days_after,
                 )
+                beta.sync_local_series_calendars(
+                    platform=args.platform,
+                    days_before=args.betaseries_days_before,
+                    days_after=args.betaseries_days_after,
+                )
             except (httpx.HTTPError, RuntimeError) as exc:
                 logging.getLogger(__name__).warning(
                     "BetaSeries calendar skipped after ingestion: %s", exc

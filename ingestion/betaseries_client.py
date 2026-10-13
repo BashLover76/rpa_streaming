@@ -152,6 +152,71 @@ class BetaSeriesClient:
         LOGGER.info("BetaSeries title calendar synced: %s episodes", count)
         return count
 
+    def sync_local_series_calendars(
+        self,
+        *,
+        platform: str | None = None,
+        days_before: int = 30,
+        days_after: int = 180,
+        limit: int | None = None,
+    ) -> int:
+        """Sync calendars for locally resolved BetaSeries shows."""
+        query = """
+            SELECT id, titre, betaseries_id
+            FROM series
+            WHERE betaseries_id IS NOT NULL
+              AND COALESCE(LOWER(imdb_kind), '') NOT IN ('movie', 'film')
+        """
+        params: list[Any] = []
+        if platform:
+            query += """
+              AND (
+                plateforme = ?
+                OR id IN (
+                    SELECT DISTINCT serie_id
+                    FROM history
+                    WHERE plateforme_source = ?
+                )
+              )
+            """
+            params.extend([platform, platform])
+        query += " ORDER BY updated_at DESC, id DESC"
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(limit)
+
+        with self.db.connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+
+        min_date = date.today() - timedelta(days=days_before)
+        max_date = date.today() + timedelta(days=days_after)
+        synced = 0
+        for row in rows:
+            show_id = row["betaseries_id"]
+            details = self.title_details(show_id, "series")
+            show = details or {"id": show_id, "title": row["titre"]}
+            if details:
+                self.db.update_series_metadata(
+                    int(row["id"]), **self._normalize_show(details)
+                )
+            for episode in self.fetch_show_episodes(show_id):
+                normalized = self._normalize_show_episode(episode, show)
+                if not normalized:
+                    continue
+                if (
+                    normalized.get("season") is None
+                    or normalized.get("episode") is None
+                    or not normalized.get("air_date")
+                ):
+                    continue
+                air_date = _parse_iso_date(normalized.get("air_date"))
+                if air_date is None or not (min_date <= air_date <= max_date):
+                    continue
+                self.db.upsert_calendar_episode(normalized)
+                synced += 1
+        LOGGER.info("BetaSeries local series calendars synced: %s episodes", synced)
+        return synced
+
     def search_show(self, title: str) -> dict[str, Any] | None:
         try:
             shows = self._get_json("shows/search", params={"title": title}).get(
@@ -534,3 +599,12 @@ class BetaSeriesClient:
             return False
         today = date.today()
         return today <= air_date <= max_date
+
+
+def _parse_iso_date(raw_date: str | None) -> date | None:
+    if not raw_date:
+        return None
+    try:
+        return date.fromisoformat(raw_date[:10])
+    except ValueError:
+        return None
