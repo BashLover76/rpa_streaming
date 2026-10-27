@@ -1,39 +1,31 @@
-# rpa_streaming
+# StreamPilot — rpa_streaming
 
-Projet personnel d'ingestion locale pour centraliser les séries, films, calendriers BetaSeries et historiques de visionnage issus des plateformes de streaming disponibles en France.
+[English version](README.en.md)
 
-Le flux collecte les films et les séries ensemble, conserve l'historique brut avant identification, enrichit les fiches avec BetaSeries/IMDb, puis expose les données dans l'application web Flask.
+Projet personnel d’ingestion locale qui centralise les séries, films, calendriers BetaSeries et historiques de visionnage provenant des principales plateformes de streaming disponibles en France.
+
+StreamPilot collecte les films et les séries, conserve les données brutes avant leur identification, enrichit les fiches avec BetaSeries et IMDb, puis les expose dans une application web Flask et une application Android. La gestion multi-profil permet d’associer les profils des différentes plateformes à des méta-profils communs.
+
+## Fonctionnalités
+
+- ingestion RPA via Chrome CDP, avec modes complet et différentiel ;
+- prise en charge de plusieurs plateformes et profils de streaming ;
+- identification et enrichissement via BetaSeries, IMDb et Ollama ;
+- synchronisation des séries, calendriers et historiques avec BetaSeries ;
+- application web Flask avec calendrier, administration et suivi des ingestions ;
+- application Android avec cache hors ligne, profils et relance des ingestions ;
+- déploiement Docker et observabilité avec Loki/Grafana ;
+- stockage local SQLite, sauvegardes et outils de suppression contrôlée.
 
 ```mermaid
 flowchart TD
-    A[Chrome CDP / API Crunchyroll] --> B[Historique brut]
-    B --> C[Identification IMDb / BetaSeries]
-    C --> D[SQLite streaming.db]
-    D --> E[Application web]
-    D --> F[Sync BetaSeries]
+    A[Chrome CDP / APIs] --> B[Historique brut]
+    B --> C[Identification et enrichissement]
+    C --> D[(SQLite streaming.db)]
+    D --> E[Application web Flask]
+    D --> F[Application Android]
+    D <--> G[BetaSeries]
 ```
-
-## Documentation
-
-- [Installation](docs/installation.md) : prérequis, installation automatique multi-OS, venv et Playwright.
-- [Configuration](docs/configuration.md) : `.env`, fichiers JSON locaux, plateformes, credentials RPA, sécurité et limites.
-- [Utilisation](docs/usage.md) : commandes d'ingestion, Chrome CDP, modes full/différentiel, enrichissement et sync BetaSeries.
-- [Application web et administration](docs/web-admin.md) : vues calendrier/admin et suppression locale/distante.
-- [Docker web app](docs/docker.md) : image Docker et compose pour exposer Flask/API sur le serveur local.
-- [Application Android](docs/mobile.md) : app mobile, synchronisation serveur local et deep links streaming.
-- [Versioning et Git](docs/versioning.md) : versions Android/Docker, branches et commits recommandés.
-- [GitFlow strict](docs/gitflow.md) : règles de branches, release, hotfix, merge et tags.
-- [Architecture](docs/architecture.md) : schéma de flux, couches internes et extension navigateur.
-- [Connecteurs](docs/connectors.md) : stratégies par plateforme et notes API/RPA.
-- [Logs et observabilité](docs/observability.md) : fichiers logs, rotation, Grafana/Loki.
-- [Vue d'ensemble détaillée](docs/overview.md) : principes de collecte et qualité des données.
-- [Changelog](CHANGELOG.md) : historique des changements notables.
-
-## Aperçu de l'application web
-
-![Accueil séries](docs/screenshots/home-series.png)
-
-Plus de captures : [Application web et administration](docs/web-admin.md#captures-decran).
 
 ## Démarrage rapide
 
@@ -46,10 +38,14 @@ cp config/crunchyroll.example.json config/crunchyroll.local.json
 cp config/streaming_profiles.example.json config/streaming_profiles.local.json
 cp config/streaming_platforms.example.json config/streaming_platforms.local.json
 cp config/streaming_platform_config.example.json config/streaming_platform_config.local.json
-# renseigner les fichiers config/*.local.json, puis :
+cp config/profile_matrix.example.json config/profile_matrix.local.json
+
+# Renseigner .env et les fichiers config/*.local.json, puis :
 python main_ingestion.py --cdp-url http://127.0.0.1:9222 --force-restart-chrome
 flask --app web_app run --host 127.0.0.1 --port 5000
 ```
+
+Ouvre ensuite `http://127.0.0.1:5000`. Consulte le guide d’[installation](docs/installation.md) et de [configuration](docs/configuration.md) avant une première ingestion réelle.
 
 ## Commandes courantes
 
@@ -57,7 +53,7 @@ flask --app web_app run --host 127.0.0.1 --port 5000
 # Toutes les plateformes configurées
 python main_ingestion.py --cdp-url http://127.0.0.1:9222 --cdp-timeout-ms 30000
 
-# Redémarrer Chrome automatiquement avec CDP + extension si nécessaire
+# Redémarrer Chrome avec CDP et l’extension si nécessaire
 python main_ingestion.py --cdp-url http://127.0.0.1:9222 --force-restart-chrome
 
 # Mode différentiel
@@ -70,9 +66,33 @@ flask --app web_app run --host 127.0.0.1 --port 5000
 python -m unittest discover -s tests
 ```
 
-## Règles de sécurité
+## Documentation
 
-- Ne commit jamais `.env`.
-- Ne commit jamais `config/*.local.json`.
-- Ne partage pas `artifacts/rpa`, `backups/` ou `logs/` si ces fichiers contiennent ton historique personnel.
-- Utilise `--apply` uniquement après inspection des dry-runs pour les scripts de suppression ou de synchronisation distante.
+- [Installation](docs/installation.md) — prérequis, installation multi-OS, environnement virtuel et Playwright.
+- [Configuration](docs/configuration.md) — variables d’environnement, configurations locales, profils et sécurité.
+- [Utilisation](docs/usage.md) — ingestion, Chrome CDP, modes complet/différentiel et synchronisation BetaSeries.
+- [Application web et administration](docs/web-admin.md) — calendrier, profils, suivi et suppressions.
+- [Docker](docs/docker.md) — services web et RPA conteneurisés.
+- [Application Android](docs/mobile.md) — synchronisation, administration et liens profonds.
+- [Architecture](docs/architecture.md) — flux de données, couches internes et extension navigateur.
+- [Connecteurs](docs/connectors.md) — stratégies et particularités de chaque plateforme.
+- [Observabilité](docs/observability.md) — logs, rotation, Loki et Grafana.
+- [Versioning et Git](docs/versioning.md) et [GitFlow](docs/gitflow.md).
+- [Vue d’ensemble](docs/overview.md) et [changelog](CHANGELOG.md).
+
+## Aperçu
+
+![Accueil séries](docs/screenshots/home-series.png)
+
+Davantage de captures sont disponibles dans la documentation de l’[application web](docs/web-admin.md#captures-decran).
+
+## Sécurité et données personnelles
+
+- Ne jamais commiter `.env`, `config/*.local.json` ou un état de navigateur.
+- Ne pas partager `artifacts/rpa/`, `backups/` ou `logs/` : ils peuvent contenir un historique personnel ou des jetons de session.
+- Inspecter les dry-runs avant d’utiliser `--apply` pour une suppression ou une synchronisation distante.
+- Le projet est prévu pour un usage local : ne pas exposer les services sans authentification et filtrage réseau adaptés.
+
+## Licence
+
+Projet personnel. Aucune licence open source n’est actuellement déclarée.
